@@ -114,8 +114,7 @@ The `common` role will install Docker and set up the containers.
        image: ubuntu:latest
        state: started
        ports:
-         - "2222:22"
-       command: /usr/sbin/init
+         - "2222:80"
 
    - name: Create and start web2 container
      docker_container:
@@ -123,7 +122,7 @@ The `common` role will install Docker and set up the containers.
        image: ubuntu:latest
        state: started
        ports:
-         - "2223:22"
+         - "2223:80"
        command: /usr/sbin/init
    ```
 
