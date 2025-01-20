@@ -103,15 +103,15 @@ The `common` role will install Docker and set up the containers.
         - docker.service
         - containerd.service
 
-   - name: Pull Ubuntu image for containers
+   - name: Pull  image for containers
      docker_image:
-       name: ubuntu
+       name: httpd
        source: pull
 
    - name: Create and start web1 container
      docker_container:
        name: web1
-       image: ubuntu:latest
+       image: httpd
        state: started
        ports:
          - "2222:80"
@@ -119,11 +119,11 @@ The `common` role will install Docker and set up the containers.
    - name: Create and start web2 container
      docker_container:
        name: web2
-       image: ubuntu:latest
+       image: httpd
        state: started
        ports:
          - "2223:80"
-       command: /usr/sbin/init
+       
    ```
 
 ---
