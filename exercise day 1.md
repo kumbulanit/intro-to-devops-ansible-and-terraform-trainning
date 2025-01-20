@@ -77,11 +77,8 @@ The `common` role will install Docker and set up the containers.
         state: present
         update_cache: true
       loop:
-        - docker-ce
-        - docker-ce-cli
-        - containerd.io
-        - docker-buildx-plugin
-        - docker-compose-plugin
+        - docker.io
+        
 
     - name: Add Docker group
       ansible.builtin.group:
@@ -90,7 +87,7 @@ The `common` role will install Docker and set up the containers.
 
     - name: Add user to Docker group
       ansible.builtin.user:
-        name: "{{ ansible_user }}"
+        name: "{{ ansible_user_id }}"
         groups: docker
         append: true
 

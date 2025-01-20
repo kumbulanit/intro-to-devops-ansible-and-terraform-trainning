@@ -83,15 +83,37 @@ We’ll create a custom role that installs and configures an Nginx web server, i
    Create a template file `roles/nginx_custom/templates/nginx.conf.j2`:
    ```nginx
    # roles/nginx_custom/templates/nginx.conf.j2
-   server {
-       listen {{ server_port }};
-       server_name {{ server_name }};
+daemon            off;
+worker_processes  2;
+user              www-data;
 
-       location / {
-           root /var/www/html;
-           index index.html;
-       }
-   }
+events {
+    use           epoll;
+    worker_connections  128;
+}
+
+error_log         logs/error.log info;
+
+http {
+    server_tokens off;
+    include       mime.types;
+    charset       utf-8;
+
+    access_log    logs/access.log  combined;
+
+    server {
+        server_name   localhost;
+        listen        127.0.0.1:80;
+
+        error_page    500 502 503 504  /50x.html;
+
+        location      / {
+            root      html;
+        }
+
+    }
+
+} 
    ```
 
 ---
