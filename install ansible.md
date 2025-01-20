@@ -74,8 +74,14 @@ sudo nano /etc/ansible/hosts
 ### **7. Test Ansible**
 Ping a target machine to confirm Ansible is working. Replace `<remote-host>` with the hostname or IP address of your target machine.
 
+on local host 
+
 ```bash
-ansible -m ping all --ask-pass -i <remote-host>,
+ansible -m ping  localhost
+```
+
+```bash
+ansible -m ping  <remote-host>,
 ```
 
 This assumes the target machine is accessible and SSH is configured.
