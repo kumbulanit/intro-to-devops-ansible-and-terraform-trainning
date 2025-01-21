@@ -138,7 +138,26 @@ The `common` role will install Docker and set up the containers.
 
        
    ```
+option 2 of copyimng file into docker container 
 
+```yaml
+---
+- name : Deploy a Sample HTML Page
+  community.docker.docker_container_copy_into:
+    container : "{{ item }}"
+    container_path : /usr/local/apache2/htdocs/index.html
+      #owner_id: 0
+      #group_id: 0
+    mode: 0755
+    content: |
+      <html>
+      <head><title>Web Server {{ item }}</title></head>
+      <body><h1>Welcome to {{ item }}</h1></body>
+      </html>
+  loop:
+    - web1
+    - web2
+```
 ---
 
 ### **Step 4: Create the Webserver Role**
