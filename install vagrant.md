@@ -213,3 +213,4 @@ This configuration:
 - Configures a static inventory for Ansible.
 - Deploys Apache web servers with Ansible.
 
+https://computingforgeeks.com/install-latest-vagrant-on-ubuntu/
