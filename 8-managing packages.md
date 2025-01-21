@@ -1,5 +1,3 @@
----
-
 ### **Basic Syntax for Managing Packages**
 
 The general syntax for managing packages is:
