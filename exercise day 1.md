@@ -120,6 +120,22 @@ The `common` role will install Docker and set up the containers.
        state: started
        ports:
          - "2223:80"
+    - name: "Container Info"
+        docker_container_info:
+            name: web1
+        register: dinfo
+
+      - name: "Printing IP of Docker container..."
+        debug:
+              msg: "{{ dinfo.container.NetworkSettings.IPAddress}}"
+
+      - name: updating ansible inventory  with new docker info.......
+        blockinfile:
+            path: "/etc/ansible/hosts"
+            block: |
+                    [docker]
+                    {{ dinfo['container']['NetworkSettings']['IPAddress'] }} ansible_user=root ansible_ssh_pass=centos  ansible_connection=ssh
+
        
    ```
 
