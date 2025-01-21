@@ -1,146 +1,126 @@
-Below is a step-by-step guide to using Ansible to automate the installation of Vagrant, the configuration of two Ubuntu servers using Vagrant, and the setup of Docker as the provider for Vagrant with SSH access.
+Using **Docker** as the provider for Vagrant is a lightweight alternative to VirtualBox. Below is the step-by-step guide to creating two Ubuntu-based Docker containers using Vagrant and configuring them for Ansible practice.
 
 ---
 
 ### **1. Prerequisites**
-Ensure the following are installed on your control machine (the machine running Ansible):
-- Python 3 and `pip`
-- Ansible
-
-Install Ansible if it’s not already installed:
-```bash
-sudo apt update
-sudo apt install -y ansible
-```
-
----
-
-### **2. Ansible Playbook Overview**
-The playbook will:
-1. Install Vagrant and Docker on the control machine.
-2. Configure Docker as the virtualization provider for Vagrant.
-3. Use a Vagrantfile to create two Ubuntu-based Docker containers.
-4. Set up SSH access to the two servers for Ansible.
-
----
-
-### **3. Ansible Playbook Content**
-Create a directory for the playbook and related files:
-```bash
-mkdir ~/ansible-vagrant-setup
-cd ~/ansible-vagrant-setup
-```
-
-#### Create the Playbook File
-Create a file called `setup_vagrant_docker.yml`:
-```bash
-nano setup_vagrant_docker.yml
-```
-
-**Playbook Content:**
-```yaml
----
-- name: Set up Vagrant with Docker provider and two Ubuntu servers
-  hosts: localhost
-  become: yes
-  tasks:
-    # Install dependencies
-    - name: Install required packages
-      apt:
-        name: 
-          - vagrant
-          - docker.io
-          - sshpass
-        state: present
-        update_cache: yes
-
-    - name: Add current user to Docker group
-      user:
-        name: "{{ ansible_user }}"
-        groups: docker
-        append: yes
-
-    - name: Install Vagrant Docker Compose plugin
-      command: vagrant plugin install vagrant-docker-compose
-      args:
-        creates: /home/{{ ansible_user }}/.vagrant.d/plugins.json
-
-    # Create a directory for Vagrantfile
-    - name: Create a Vagrant project directory
-      file:
-        path: ~/vagrant-docker-project
-        state: directory
-
-    - name: Create the Vagrantfile
-      copy:
-        dest: ~/vagrant-docker-project/Vagrantfile
-        content: |
-          Vagrant.configure("2") do |config|
-            config.vm.provider "docker" do |d|
-              d.has_ssh = true
-            end
-
-            # Define the first Docker container
-            config.vm.define "ubuntu-server-1" do |node1|
-              node1.vm.provider "docker" do |d|
-                d.image = "ubuntu:20.04"
-                d.name = "ubuntu-server-1"
-                d.remains_running = true
-                d.ports = ["2222:22"]
-              end
-              node1.vm.hostname = "ubuntu-server-1"
-              node1.ssh.username = "root"
-            end
-
-            # Define the second Docker container
-            config.vm.define "ubuntu-server-2" do |node2|
-              node2.vm.provider "docker" do |d|
-                d.image = "ubuntu:20.04"
-                d.name = "ubuntu-server-2"
-                d.remains_running = true
-                d.ports = ["2223:22"]
-              end
-              node2.vm.hostname = "ubuntu-server-2"
-              node2.ssh.username = "root"
-            end
-          end
-
-    # Bring up the Vagrant containers
-    - name: Start the Vagrant containers
-      command: vagrant up
-      args:
-        chdir: ~/vagrant-docker-project
-
-    # Install SSH on containers
-    - name: Install SSH on ubuntu-server-1
-      command: >
-        docker exec ubuntu-server-1 /bin/bash -c
-        "apt-get update && apt-get install -y openssh-server && service ssh start"
-
-    - name: Install SSH on ubuntu-server-2
-      command: >
-        docker exec ubuntu-server-2 /bin/bash -c
-        "apt-get update && apt-get install -y openssh-server && service ssh start"
-```
-
----
-
-### **4. Run the Playbook**
-1. Execute the playbook:
+1. **Install Docker**:
    ```bash
-   ansible-playbook setup_vagrant_docker.yml
+   sudo apt update
+   sudo apt install -y docker.io
+   sudo systemctl start docker
+   sudo systemctl enable docker
+   ```
+   Add your user to the Docker group to avoid using `sudo`:
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+   Log out and back in for the changes to take effect.
+
+2. **Install Vagrant**:
+   ```bash
+   sudo apt install -y vagrant
    ```
 
-2. After running, verify that the containers are up and running:
+3. **Install Vagrant Docker Plugin** (optional, ensures Docker works seamlessly with Vagrant):
    ```bash
-   vagrant global-status
+   vagrant plugin install vagrant-docker-compose
    ```
 
 ---
 
-### **5. Configure Ansible Inventory for SSH Access**
+### **2. Create a Vagrant Configuration**
+
+1. Create a project directory:
+   ```bash
+   mkdir -p ~/vagrant-docker-ansible
+   cd ~/vagrant-docker-ansible
+   ```
+
+2. Initialize a new Vagrantfile:
+   ```bash
+   vagrant init
+   ```
+
+3. Edit the **Vagrantfile**:
+   ```bash
+   nano Vagrantfile
+   ```
+
+   **Content:**
+   ```ruby
+   Vagrant.configure("2") do |config|
+     config.vm.provider "docker" do |d|
+       d.has_ssh = true
+     end
+
+     # Define the first Docker container
+     config.vm.define "ansible-node1" do |node1|
+       node1.vm.provider "docker" do |d|
+         d.image = "ubuntu:20.04"
+         d.name = "ansible-node1"
+         d.remains_running = true
+         d.ports = ["2222:22"]
+       end
+       node1.vm.hostname = "ansible-node1"
+       node1.ssh.username = "root"
+     end
+
+     # Define the second Docker container
+     config.vm.define "ansible-node2" do |node2|
+       node2.vm.provider "docker" do |d|
+         d.image = "ubuntu:20.04"
+         d.name = "ansible-node2"
+         d.remains_running = true
+         d.ports = ["2223:22"]
+       end
+       node2.vm.hostname = "ansible-node2"
+       node2.ssh.username = "root"
+     end
+   end
+   ```
+
+4. Start the Vagrant containers:
+   ```bash
+   vagrant up
+   ```
+
+5. Verify the status:
+   ```bash
+   vagrant status
+   ```
+
+---
+
+### **3. Install SSH Server in the Containers**
+
+By default, Ubuntu Docker images do not have an SSH server installed. We'll install it using Vagrant's SSH access:
+
+1. SSH into each container:
+   ```bash
+   vagrant ssh ansible-node1
+   ```
+
+2. Inside the container, install and configure SSH:
+   ```bash
+   apt update
+   apt install -y openssh-server
+   service ssh start
+   ```
+   Exit the container:
+   ```bash
+   exit
+   ```
+
+3. Repeat the steps for `ansible-node2`.
+
+---
+
+### **4. Configure Ansible Inventory**
+
 1. Create an inventory file:
    ```bash
+   mkdir -p ~/ansible-practice
+   cd ~/ansible-practice
    nano inventory.yml
    ```
 
@@ -148,27 +128,88 @@ nano setup_vagrant_docker.yml
    ```yaml
    all:
      hosts:
-       ubuntu-server-1:
+       ansible-node1:
          ansible_host: 127.0.0.1
          ansible_port: 2222
          ansible_user: root
-       ubuntu-server-2:
+       ansible-node2:
          ansible_host: 127.0.0.1
          ansible_port: 2223
          ansible_user: root
    ```
 
-2. Test the connection:
+2. Test connectivity:
    ```bash
    ansible all -i inventory.yml -m ping
    ```
 
 ---
 
+### **5. Write a Simple Playbook**
+
+Create a playbook to install Apache on the containers:
+
+1. Create a playbook:
+   ```bash
+   nano webserver.yml
+   ```
+
+   **Content:**
+   ```yaml
+   ---
+   - name: Configure Web Servers
+     hosts: all
+     become: yes
+
+     tasks:
+       - name: Update apt cache
+         apt:
+           update_cache: yes
+
+       - name: Install Apache
+         apt:
+           name: apache2
+           state: present
+
+       - name: Ensure Apache is running
+         service:
+           name: apache2
+           state: started
+           enabled: yes
+
+       - name: Deploy a sample webpage
+         copy:
+           dest: /var/www/html/index.html
+           content: |
+             <html>
+             <head><title>Ansible Web Server</title></head>
+             <body>
+               <h1>Welcome to {{ inventory_hostname }}</h1>
+             </body>
+             </html>
+   ```
+
+2. Run the playbook:
+   ```bash
+   ansible-playbook -i inventory.yml webserver.yml
+   ```
+
+---
+
+### **6. Verify the Setup**
+
+1. Access the web servers:
+   - `http://127.0.0.1:2222`
+   - `http://127.0.0.1:2223`
+
+2. Both servers should display a custom webpage.
+
+---
+
 ### **Summary**
-This playbook automates:
-1. Installing Vagrant and Docker.
-2. Configuring Docker as the provider for Vagrant.
-3. Creating two Ubuntu servers running in Docker containers.
-4. Setting up SSH for Ansible to communicate with the servers.
+This configuration:
+- Uses Vagrant with Docker to create two Ubuntu containers.
+- Installs SSH for Ansible communication.
+- Configures a static inventory for Ansible.
+- Deploys Apache web servers with Ansible.
 
