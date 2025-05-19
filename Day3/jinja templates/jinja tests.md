@@ -16,13 +16,13 @@
 # 🧰 SETUP INSTRUCTIONS
 # =====================================
 
-# Step 1: Create working directory
+### Step 1: Create working directory
 ```bash
 mkdir -p ~/jinja2-test-lab
 cd ~/jinja2-test-lab
 ```
 
-# Step 2: Create inventory file
+### Step 2: Create inventory file
 ```yaml
 cat > inventory.ini <<EOF
 [local]
@@ -30,7 +30,7 @@ localhost ansible_connection=local
 EOF
 ```
 
-# Step 3: Create the playbook file with test cases
+### Step 3: Create the playbook file with test cases
 ```bash
 cat > jinja2-tests-playbook.yml <<EOF
 - name: Jinja2 Test Scenarios Lab
@@ -101,7 +101,7 @@ when: 'admin' in users
 EOF
 ```
 
-# Step 4: Run the playbook
+### Step 4: Run the playbook
 ```bash
 ansible-playbook -i inventory.ini jinja2-tests-playbook.yml
 ```

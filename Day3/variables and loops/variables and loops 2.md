@@ -1,4 +1,4 @@
----
+
 # 🧪 Ansible Hands-On Lab: Mastering Variables from Simple to Advanced
 # Duration: 30–45 minutes
 # Concepts Covered:
@@ -13,12 +13,12 @@
 # 🧰 LAB SETUP INSTRUCTIONS
 # =====================================
 
-# Step 1: Create your lab working directory
+### Step 1: Create your lab working directory
 ```bash
 mkdir -p ~/ansible-vars-lab/{templates,vars}
 cd ~/ansible-vars-lab
 ```
-# Step 2: Create your inventory file
+### Step 2: Create your inventory file
 ```bash
 cat > inventory.ini <<EOF
 [local]

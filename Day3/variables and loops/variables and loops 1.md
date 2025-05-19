@@ -1,4 +1,4 @@
----
+
 # 🧪 Hands-On Ansible Lab: Variables, Loops, Templates, Conditions, and Blocks
 # Duration: 30–45 minutes
 # Concepts Covered:
@@ -12,19 +12,19 @@
 # 🧰 LAB SETUP INSTRUCTIONS
 # =====================================
 
-# Step 1: Create your lab directory
+### Step 1: Create your lab directory
 ```bash
 mkdir -p ~/ansible-lab/{templates,vars}
 cd ~/ansible-lab
 ```
-# Step 2: Create inventory file
+### Step 2: Create inventory file
 ```bash
 cat > inventory.ini <<EOF
 [local]
 localhost ansible_connection=local
 EOF
 ```
-# Step 3: Create variable file for external loading
+### Step 3: Create variable file for external loading
 ```bash
 cat > vars/userlist.yml <<EOF
 users:
@@ -37,7 +37,7 @@ groups: developers
 EOF
 ```
 
-# Step 4: Create a basic template file
+### Step 4: Create a basic template file
 ```bash
 cat > templates/welcome.j2 <<EOF
 Welcome {{ user }}!
@@ -122,17 +122,17 @@ EOF
 # =====================================
 # ▶️ HOW TO RUN
 # =====================================
-# Step 1: Ensure you are in the lab directory
+### Step 1: Ensure you are in the lab directory
 ```bash
 cd ~/ansible-lab
 ```
 
-# Step 2: Run the playbook
+### Step 2: Run the playbook
 ```bash
 ansible-playbook -i inventory.ini ansible-lab.yml
 ```
 
-# Step 3: View output files
+### Step 3: View output files
 ```bash
 cat /tmp/welcome_trainer.txt
 ```

@@ -1,4 +1,4 @@
----
+
 # 🧪 Modular Ansible Lab Series: Topics by Playbook + Final Integration
 # Estimated Duration: 60–75 minutes
 # Objective: Learn each concept individually, then combine them into one cohesive playbook
@@ -30,7 +30,7 @@
 ```
 
 # =====================================
-# 🧾 INVENTORY FILE
+### 🧾 INVENTORY FILE
 ```bash
 cat > ~/ansible-lab-modular/inventory.ini <<EOF
 [local]
@@ -39,7 +39,7 @@ EOF
 ```
 
 # =====================================
-# 🔁 1. Variables and Loops
+### 🔁 1. Variables and Loops
 ```bash
 cat > ~/ansible-lab-modular/playbooks/1_variables_loops.yml <<EOF
 - name: Basic Variables and Loops
@@ -55,7 +55,7 @@ loop: "{{ range(1, loop_count + 1) | list }}"
 EOF
 ```
 # =====================================
-# 📚 2. Complex Variables in Loops
+### 📚 2. Complex Variables in Loops
 ```bash
 cat > ~/ansible-lab-modular/vars/userlist.yml <<EOF
 users:
@@ -85,7 +85,7 @@ EOF
 ```
 
 # =====================================
-# 📝 3. Variables and Templates
+### 📝 3. Variables and Templates
 ```bash
 cat > ~/ansible-lab-modular/templates/userinfo.j2 <<EOF
 Welcome {{ user }}
@@ -109,7 +109,7 @@ EOF
 ```
 
 # =====================================
-# ❗ 4. Using Variables in Conditions
+### ❗ 4. Using Variables in Conditions
 ```bash
 cat > ~/ansible-lab-modular/playbooks/4_variables_conditions.yml <<EOF
 - name: Conditionals with Variables
@@ -125,7 +125,7 @@ EOF
 ```
 
 # =====================================
-# 🔳 5. Blocks
+### 🔳 5. Blocks
 ```bash
 cat > ~/ansible-lab-modular/playbooks/5_blocks.yml <<EOF
 - name: Block with rescue and always
@@ -143,7 +143,7 @@ msg: "Always runs"
 EOF
 ```
 # =====================================
-# 🙋 6. Prompts
+### 🙋 6. Prompts
 ```bash
 cat > ~/ansible-lab-modular/playbooks/6_prompts.yml <<EOF
 - name: Prompt Example
@@ -158,7 +158,7 @@ EOF
 ```
 
 # =====================================
-# 🧠 7. System Facts
+### 🧠 7. System Facts
 ```bash
 cat > ~/ansible-lab-modular/playbooks/7_system_facts.yml <<EOF
 - name: Use System Facts
@@ -171,7 +171,7 @@ EOF
 ```
 
 # =====================================
-# ✍️ 8. Set Variables in Playbook
+### ✍️ 8. Set Variables in Playbook
 ```bash
 cat > ~/ansible-lab-modular/playbooks/8_set_variables.yml <<EOF
 - name: set_fact usage
@@ -185,7 +185,7 @@ EOF
 ```
 
 # =====================================
-# 🧾 9. Registered Variables
+### 🧾 9. Registered Variables
 ```bash
 cat > ~/ansible-lab-modular/playbooks/9_registered_variables.yml <<EOF
 - name: Register and reuse command output
@@ -199,7 +199,7 @@ EOF
 ```
 
 # =====================================
-# 🔄 10. CLI Variables
+### 🔄 10. CLI Variables
 ```bash
 cat > ~/ansible-lab-modular/playbooks/10_cli_variables.yml <<EOF
 - name: CLI Variables Demo
@@ -211,7 +211,7 @@ EOF
 ```
 
 # =====================================
-# 🧩 FINAL LAB: Combine Everything
+### 🧩 FINAL LAB: Combine Everything
 ```bash
 cat > ~/ansible-lab-modular/playbooks/final_combined_lab.yml <<EOF
 - name: Final Integrated Lab
