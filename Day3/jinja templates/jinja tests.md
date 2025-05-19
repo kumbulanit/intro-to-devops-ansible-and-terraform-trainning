@@ -1,4 +1,4 @@
----
+
 # 🧪 Full Ansible Hands-On Lab: Foundational to Advanced Concepts
 # Tand now a dedicated test lab for Jinja2 tests.
 
@@ -106,19 +106,19 @@ EOF
 ansible-playbook -i inventory.ini jinja2-tests-playbook.yml
 ```
 
-# =====================================
-# 📚 EXPLANATIONS
-# =====================================
-# 1. `is defined`: Confirms variable is present.
-# 2. `is not defined`: Checks missing or undefined variables.
-# 3. `is none`: Checks for null or empty state.
-# 4. `is string`: Ensures value is text.
-# 5. `is number`: Confirms it's an integer or float.
-# 6. `is even`: Validates even numbers.
-# 7. `is odd`: Validates odd numbers.
-# 8. `is iterable`: Checks if value can be looped.
-# 9. `is mapping`: Checks if it's a dictionary.
-# 10. `in`: Checks membership in a list or string.
+=====================================
+ 📚 EXPLANATIONS
+ =====================================
+### 1. `is defined`: Confirms variable is present.
+### 2. `is not defined`: Checks missing or undefined variables.
+### 3. `is none`: Checks for null or empty state.
+### 4. `is string`: Ensures value is text.
+### 5. `is number`: Confirms it's an integer or float.
+### 6. `is even`: Validates even numbers.
+### 7. `is odd`: Validates odd numbers.
+### 8. `is iterable`: Checks if value can be looped.
+### 9. `is mapping`: Checks if it's a dictionary.
+### 10. `in`: Checks membership in a list or string.
 
 
 

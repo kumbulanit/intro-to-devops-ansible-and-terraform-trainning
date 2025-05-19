@@ -1,32 +1,32 @@
----
-# 🧪 Full Ansible Hands-On Lab: Foundational to Advanced Concepts
-# This lab includes Ansible + OpenStack automation, and now a full walkthrough of Jinja2 template usage.
 
-# =====================================
-# 📦 JINJA2 HANDS-ON LAB: SIMPLE TO ADVANCED
-# Duration: 60–75 minutes
-# =====================================
+#### 🧪 Full Ansible Hands-On Lab: Foundational to Advanced Concepts
+#### This lab includes Ansible + OpenStack automation, and now a full walkthrough of Jinja2 template usage.
+
+#### =====================================
+#### 📦 JINJA2 HANDS-ON LAB: SIMPLE TO ADVANCED
+#### Duration: 60–75 minutes
+#### =====================================
 
 ```
-# 📁 Directory Structure:
-# jinja2-lab/
-# ├── inventory.ini
-# ├── jinja2-playbook.yml
-# ├── group_vars/
-# │   └── all.yml
-# ├── host_vars/
-# │   └── localhost.yml
-# ├── templates/
-# │   ├── welcome.j2
-# │   ├── config_filter_demo.j2
-# │   ├── logic_test_demo.j2
-# │   └── feature_list.j2
-# └── facts_tasks.yml
+#### 📁 Directory Structure:
+#### jinja2-lab/
+#### ├── inventory.ini
+#### ├── jinja2-playbook.yml
+#### ├── group_vars/
+#### │   └── all.yml
+#### ├── host_vars/
+#### │   └── localhost.yml
+#### ├── templates/
+#### │   ├── welcome.j2
+#### │   ├── config_filter_demo.j2
+#### │   ├── logic_test_demo.j2
+#### │   └── feature_list.j2
+#### └── facts_tasks.yml
 ```
 
-# =====================================
-# 🧰 LAB SETUP INSTRUCTIONS (STEP BY STEP)
-# =====================================
+#### =====================================
+#### 🧰 LAB SETUP INSTRUCTIONS (STEP BY STEP)
+#### =====================================
 
 ### Step 1: Create the working lab environment
 ```bash
@@ -182,7 +182,7 @@ EOF
 ```bash
 ansible-playbook -i inventory.ini jinja2-playbook.yml
 ```
-### Step 12: Verify the output files
+############ Step 12: Verify the output files
 ```bash
 cat /tmp/welcome.html
 cat /tmp/filtered_config.txt
@@ -190,18 +190,18 @@ cat /tmp/logic_output.txt
 cat /tmp/features_output.txt
 ```
 
-# =====================================
-# 📚 OFFICIAL DOCUMENTATION FOR REFERENCE
-# =====================================
-# Ansible Templates: https://docs.ansible.com/ansible/latest/user_guide/playbooks_templating.html
-# Jinja2 Docs: https://jinja.palletsprojects.com/en/latest/templates/
+#### =====================================
+#### 📚 OFFICIAL DOCUMENTATION FOR REFERENCE
+#### =====================================
+#### Ansible Templates: https://docs.ansible.com/ansible/latest/user_guide/playbooks_templating.html
+#### Jinja2 Docs: https://jinja.palletsprojects.com/en/latest/templates/
 
 
-# =====================================
-# 🧠 BONUS CHALLENGES (for individual or group work)
-# =====================================
-# 1. Add a new feature to config and use `selectattr` to filter enabled features only
-# 2. Create a template that generates a `systemd` service file from variables
-# 3. Use a loop with conditions (e.g., only list features longer than 5 chars)
-# 4. Add debug output showing if certain variables were undefined and handled properly
-# 5. Create templates per environment and switch between them using `when` conditions
+#### =====================================
+#### 🧠 BONUS CHALLENGES (for individual or group work)
+#### =====================================
+#### 1. Add a new feature to config and use `selectattr` to filter enabled features only
+#### 2. Create a template that generates a `systemd` service file from variables
+#### 3. Use a loop with conditions (e.g., only list features longer than 5 chars)
+#### 4. Add debug output showing if certain variables were undefined and handled properly
+#### 5. Create templates per environment and switch between them using `when` conditions
