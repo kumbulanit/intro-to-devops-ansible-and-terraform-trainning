@@ -1,17 +1,17 @@
 
-# 🧪 Ansible Hands-On Lab: Mastering Variables from Simple to Advanced
-# Duration: 30–45 minutes
-# Concepts Covered:
-# • Prompts
-# • Getting variables from the system (facts)
-# • Setting variables in playbooks
-# • Registered variables
-# • Getting variables from the command line
-# • Where to derive variable values (precedence)
+### 🧪 Ansible Hands-On Lab: Mastering Variables from Simple to Advanced
+### Duration: 30–45 minutes
+### Concepts Covered:
+### • Prompts
+### • Getting variables from the system (facts)
+### • Setting variables in playbooks
+### • Registered variables
+### • Getting variables from the command line
+### • Where to derive variable values (precedence)
 
-# =====================================
-# 🧰 LAB SETUP INSTRUCTIONS
-# =====================================
+### =====================================
+### 🧰 LAB SETUP INSTRUCTIONS
+### =====================================
 
 ### Step 1: Create your lab working directory
 ```bash
@@ -25,7 +25,7 @@ cat > inventory.ini <<EOF
 localhost ansible_connection=local
 EOF
 ```
-# Step 3: Create template to test multiple variables
+### Step 3: Create template to test multiple variables
 ```bash
 cat > templates/greeting.j2 <<EOF
 Hello {{ username }}!
@@ -35,9 +35,9 @@ Current time: {{ current_time }}
 Debug mode: {{ debug_mode | default(false) }}
 EOF
 ```
-# =====================================
-# 📄 PLAYBOOK: vars-lab.yml
-# =====================================
+### =====================================
+### 📄 PLAYBOOK: vars-lab.yml
+### =====================================
 ```bash
 cat > vars-lab.yml <<EOF
 - name: Ansible Variables Lab (Simple to Advanced)
@@ -127,10 +127,10 @@ debug:
 msg: "Block completed (success or fail)"
 EOF
 ```
-# =====================================
-# ▶️ HOW TO EXECUTE LAB
-# =====================================
-# Step 1: Enter the directory
+### =====================================
+### ▶️ HOW TO EXECUTE LAB
+### =====================================
+### Step 1: Enter the directory
 ```bash
 cd ~/ansible-vars-lab
 ```
@@ -138,24 +138,24 @@ cd ~/ansible-vars-lab
 ```bash
 ansible-playbook -i inventory.ini vars-lab.yml
 ```
-# Step 3: Run with a command-line override for debug mode
+### Step 3: Run with a command-line override for debug mode
 ```bash
 ansible-playbook -i inventory.ini vars-lab.yml --extra-vars "debug_mode=true"
 ```
-# Step 4: View template output
+### Step 4: View template output
 ```bash
 cat /tmp/greeting_<your_username>.txt
 ```
-# =====================================
-# 🧠 LAB OBJECTIVES & WHAT TO LEARN
-# =====================================
-# ✅ Prompt users for input and use their responses
-# ✅ Retrieve system information with facts
-# ✅ Define and use static variables from playbooks
-# ✅ Use registered variables and manipulate output
-# ✅ Dynamically inject values from command line with `--extra-vars`
-# ✅ Apply `when:` conditions using any variable type
-# ✅ Create a template that brings all variable sources together
-# ✅ Use blocks and fallback logic for error handling
+### =====================================
+### 🧠 LAB OBJECTIVES & WHAT TO LEARN
+### =====================================
+### ✅ Prompt users for input and use their responses
+### ✅ Retrieve system information with facts
+### ✅ Define and use static variables from playbooks
+### ✅ Use registered variables and manipulate output
+### ✅ Dynamically inject values from command line with `--extra-vars`
+### ✅ Apply `when:` conditions using any variable type
+### ✅ Create a template that brings all variable sources together
+### ✅ Use blocks and fallback logic for error handling
 
 

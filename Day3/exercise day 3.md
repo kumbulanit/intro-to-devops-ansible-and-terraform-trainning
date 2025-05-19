@@ -1,15 +1,15 @@
 
-# 🧪 Comprehensive Ansible Lab (1.5 Hours)
-# Topics Covered:
-# ✅ Ansible Config and Structure
-# ✅ Host Inventory and Variable Files
-# ✅ Roles and Best Practices
-# ✅ Key Server Modules (setup, apt/yum, copy, shell, git, etc.)
-# ✅ Jinja2 (Variables, Filters, Tests, Templates)
-# ✅ Conditionals and Looping Tasks
-# ✅ Prompting, Registering, CLI Variables
+### 🧪 Comprehensive Ansible Lab (1.5 Hours)
+### Topics Covered:
+### ✅ Ansible Config and Structure
+### ✅ Host Inventory and Variable Files
+### ✅ Roles and Best Practices
+### ✅ Key Server Modules (setup, apt/yum, copy, shell, git, etc.)
+### ✅ Jinja2 (Variables, Filters, Tests, Templates)
+### ✅ Conditionals and Looping Tasks
+### Prompting, Registering, CLI Variables
 
-# 📁 Directory Tree:
+### 📁 Directory Tree:
 ```
 # ansible-lab/
 # ├── ansible.cfg
@@ -35,8 +35,8 @@
 #     └── 6_final_integration.yml
 ```
 
-# =====================================
-# ✅ CONFIG FILE: ansible.cfg
+### =====================================
+### ✅ CONFIG FILE: ansible.cfg
 ```bash
 cat > ~/ansible-lab/ansible.cfg <<EOF
 [defaults]
@@ -47,7 +47,7 @@ host_key_checking = false
 defaults_file = ./ansible.cfg
 EOF
 ```
-# ✅ INVENTORY FILE
+### ✅ INVENTORY FILE
 ```bash
 cat > ~/ansible-lab/inventory.ini <<EOF
 [local]
@@ -55,7 +55,7 @@ localhost ansible_connection=local
 EOF
 ```
 
-# ✅ GROUP VARS
+### ✅ GROUP VARS
 ```bash
 mkdir -p ~/ansible-lab/group_vars
 ```
@@ -65,7 +65,7 @@ app_name: ansible_demo
 admin_email: admin@example.com
 EOF
 ```
-# ✅ HOST VARS
+### ✅ HOST VARS
 ```bash
 mkdir -p ~/ansible-lab/host_vars
 ```
@@ -75,7 +75,7 @@ deployment_env: dev
 EOF
 ```bash
 
-# ✅ USERS VARS FILE
+### ✅ USERS VARS FILE
 ```bash
 mkdir -p ~/ansible-lab/vars
 ```
@@ -89,7 +89,7 @@ group: devops
 EOF
 ```
 
-# ✅ TEMPLATE
+### ✅ TEMPLATE
 ```bash
 mkdir -p ~/ansible-lab/templates
 ```
@@ -100,18 +100,18 @@ This is the {{ app_name }} running on {{ ansible_facts['hostname'] }}.
 Deployment environment: {{ deployment_env }}
 EOF
 ```
-# ✅ FILE TO COPY
+### ✅ FILE TO COPY
 ```bash
 mkdir -p ~/ansible-lab/files
 ```
 ```bash
 cat > ~/ansible-lab/files/static.conf <<EOF
-# Static config file
+### Static config file
 log_level=INFO
 auth_enabled=true
 EOF
 ```
-# ✅ ROLE STRUCTURE (webapp role)
+### ✅ ROLE STRUCTURE (webapp role)
 ```bash
 mkdir -p ~/ansible-lab/roles/webapp/{tasks,handlers,templates,defaults,vars}
 ```
@@ -152,12 +152,12 @@ cat > ~/ansible-lab/roles/webapp/defaults/main.yml <<EOF
 web_port: 80
 EOF
 ```
-# =====================================
-# ✅ PLAYBOOKS PER TOPIC
+### =====================================
+### ✅ PLAYBOOKS PER TOPIC
 ```bash
 mkdir -p ~/ansible-lab/playbooks
 ```
-## 1. Config and Inventory
+###### 1. Config and Inventory
 ```bash
 cat > ~/ansible-lab/playbooks/1_config_inventory.yml <<EOF
 - name: Verify config and inventory
@@ -167,7 +167,7 @@ tasks:
 msg: "Running on {{ inventory_hostname }} using config from ansible.cfg"
 EOF
 ```
-## 2. Roles and Structure
+#### 2. Roles and Structure
 ```bash
 cat > ~/ansible-lab/playbooks/2_roles_structure.yml <<EOF
 - name: Use webapp role
@@ -176,7 +176,7 @@ roles:
 - webapp
 EOF
 ```
-## 3. Server Modules
+#### 3. Server Modules
 ```bash
 cat > ~/ansible-lab/playbooks/3_server_modules.yml <<EOF
 - name: Explore common modules
@@ -214,7 +214,7 @@ register: uptime_output
 var: uptime_output.stdout
 EOF
 ```
-## 4. Jinja Templates
+#### 4. Jinja Templates
 ```bash
 cat > ~/ansible-lab/playbooks/4_jinja_templates.yml <<EOF
 - name: Jinja template exercise
@@ -229,7 +229,7 @@ src: ../templates/welcome.j2
 dest: /tmp/welcome_jinja.txt
 EOF
 ```
-## 5. Conditional and Looping Tasks
+#### 5. Conditional and Looping Tasks
 ```bash
 cat > ~/ansible-lab/playbooks/5_conditionals_loops.yml <<EOF
 - name: Conditional and Loops
@@ -259,8 +259,8 @@ register: date_out
 msg: "Current time is {{ date_out.stdout }}"
 EOF
 ```
-# =====================================
-# ✅ FINAL INTEGRATION PLAYBOOK
+### =====================================
+### ✅ FINAL INTEGRATION PLAYBOOK
 ```bash
 cat > ~/ansible-lab/playbooks/6_final_integration.yml <<EOF
 - name: Full Integration of Concepts
@@ -305,13 +305,13 @@ dest: "/tmp/final_welcome_{{ cli_user }}.txt"
 EOF
 ```
 
-# =====================================
-# ✅ EXECUTION INSTRUCTIONS
-# cd ~/ansible-lab/playbooks
-# ansible-playbook -i ../inventory.ini 1_config_inventory.yml
-# ansible-playbook -i ../inventory.ini 2_roles_structure.yml
-# ansible-playbook -i ../inventory.ini 3_server_modules.yml
-# ansible-playbook -i ../inventory.ini 4_jinja_templates.yml
-# ansible-playbook -i ../inventory.ini 5_conditionals_loops.yml
-# ansible-playbook -i ../inventory.ini 6_final_integration.yml
+### =====================================
+### ✅ EXECUTION INSTRUCTIONS
+### cd ~/ansible-lab/playbooks
+### ansible-playbook -i ../inventory.ini 1_config_inventory.yml
+### ansible-playbook -i ../inventory.ini 2_roles_structure.yml
+### ansible-playbook -i ../inventory.ini 3_server_modules.yml
+### ansible-playbook -i ../inventory.ini 4_jinja_templates.yml
+### ansible-playbook -i ../inventory.ini 5_conditionals_loops.yml
+### ansible-playbook -i ../inventory.ini 6_final_integration.yml
 

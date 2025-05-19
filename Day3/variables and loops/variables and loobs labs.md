@@ -1,12 +1,12 @@
 
-# 🧪 Modular Ansible Lab Series: Topics by Playbook + Final Integration
-# Estimated Duration: 60–75 minutes
-# Objective: Learn each concept individually, then combine them into one cohesive playbook
+### 🧪 Modular Ansible Lab Series: Topics by Playbook + Final Integration
+### Estimated Duration: 60–75 minutes
+### Objective: Learn each concept individually, then combine them into one cohesive playbook
 
-# =====================================
-# 🧰 LAB STRUCTURE
-# =====================================
-# Each topic will have its own playbook file to demonstrate core functionality. The final playbook will integrate all topics.
+### =====================================
+### 🧰 LAB STRUCTURE
+### =====================================
+### Each topic will have its own playbook file to demonstrate core functionality. The final playbook will integrate all topics.
 ```
 # Folders:
 # ~/ansible-lab-modular/
@@ -29,7 +29,7 @@
 # │   └── final_combined_lab.yml
 ```
 
-# =====================================
+### =====================================
 ### 🧾 INVENTORY FILE
 ```bash
 cat > ~/ansible-lab-modular/inventory.ini <<EOF
@@ -38,7 +38,7 @@ localhost ansible_connection=local
 EOF
 ```
 
-# =====================================
+### =====================================
 ### 🔁 1. Variables and Loops
 ```bash
 cat > ~/ansible-lab-modular/playbooks/1_variables_loops.yml <<EOF
@@ -54,7 +54,7 @@ msg: "Hello {{ user }} - loop {{ item }}"
 loop: "{{ range(1, loop_count + 1) | list }}"
 EOF
 ```
-# =====================================
+### =====================================
 ### 📚 2. Complex Variables in Loops
 ```bash
 cat > ~/ansible-lab-modular/vars/userlist.yml <<EOF
@@ -84,7 +84,7 @@ loop: "{{ users }}"
 EOF
 ```
 
-# =====================================
+### =====================================
 ### 📝 3. Variables and Templates
 ```bash
 cat > ~/ansible-lab-modular/templates/userinfo.j2 <<EOF
@@ -108,7 +108,7 @@ dest: "/tmp/userinfo_{{ user }}.txt"
 EOF
 ```
 
-# =====================================
+### =====================================
 ### ❗ 4. Using Variables in Conditions
 ```bash
 cat > ~/ansible-lab-modular/playbooks/4_variables_conditions.yml <<EOF
@@ -124,7 +124,7 @@ when: run_task
 EOF
 ```
 
-# =====================================
+### =====================================
 ### 🔳 5. Blocks
 ```bash
 cat > ~/ansible-lab-modular/playbooks/5_blocks.yml <<EOF
@@ -142,7 +142,7 @@ always:
 msg: "Always runs"
 EOF
 ```
-# =====================================
+### =====================================
 ### 🙋 6. Prompts
 ```bash
 cat > ~/ansible-lab-modular/playbooks/6_prompts.yml <<EOF
@@ -157,7 +157,7 @@ msg: "Hello {{ username }}!"
 EOF
 ```
 
-# =====================================
+### =====================================
 ### 🧠 7. System Facts
 ```bash
 cat > ~/ansible-lab-modular/playbooks/7_system_facts.yml <<EOF
@@ -170,7 +170,7 @@ msg: "OS: {{ ansible_facts['distribution'] }}"
 EOF
 ```
 
-# =====================================
+### =====================================
 ### ✍️ 8. Set Variables in Playbook
 ```bash
 cat > ~/ansible-lab-modular/playbooks/8_set_variables.yml <<EOF
@@ -184,7 +184,7 @@ var: custom_message
 EOF
 ```
 
-# =====================================
+### =====================================
 ### 🧾 9. Registered Variables
 ```bash
 cat > ~/ansible-lab-modular/playbooks/9_registered_variables.yml <<EOF
@@ -198,8 +198,8 @@ var: result.stdout
 EOF
 ```
 
-# =====================================
-### 🔄 10. CLI Variables
+### =====================================
+##### 🔄 10. CLI Variables
 ```bash
 cat > ~/ansible-lab-modular/playbooks/10_cli_variables.yml <<EOF
 - name: CLI Variables Demo
@@ -210,8 +210,8 @@ msg: "Run mode: {{ mode | default('not set') }}"
 EOF
 ```
 
-# =====================================
-### 🧩 FINAL LAB: Combine Everything
+### =====================================
+##### 🧩 FINAL LAB: Combine Everything
 ```bash
 cat > ~/ansible-lab-modular/playbooks/final_combined_lab.yml <<EOF
 - name: Final Integrated Lab
@@ -260,12 +260,12 @@ msg: "Command line mode: {{ mode | default('none') }}"
 EOF
 ``` 
 
-# =====================================
-# ✅ INSTRUCTIONS
-# =====================================
-# Run each playbook one at a time:
-# cd ~/ansible-lab-modular/playbooks
-# ansible-playbook -i ../inventory.ini 1_variables_loops.yml
-# ...
-# ansible-playbook -i ../inventory.ini final_combined_lab.yml --extra-vars "mode=final"
+### =====================================
+### ✅ INSTRUCTIONS
+### =====================================
+### Run each playbook one at a time:
+### cd ~/ansible-lab-modular/playbooks
+### ansible-playbook -i ../inventory.ini 1_variables_loops.yml
+### ...
+### ansible-playbook -i ../inventory.ini final_combined_lab.yml --extra-vars "mode=final"
 

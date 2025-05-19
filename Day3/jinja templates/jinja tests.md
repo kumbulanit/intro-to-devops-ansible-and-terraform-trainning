@@ -1,20 +1,20 @@
 
-# 🧪 Full Ansible Hands-On Lab: Foundational to Advanced Concepts
-# Tand now a dedicated test lab for Jinja2 tests.
+### 🧪 Full Ansible Hands-On Lab: Foundational to Advanced Concepts
+### Tand now a dedicated test lab for Jinja2 tests.
 
-# =====================================
-# 🧪 JINJA2 TEST SCENARIOS: TEST LAB
-# Duration: 20–30 minutes
-# =====================================
+### =====================================
+### 🧪 JINJA2 TEST SCENARIOS: TEST LAB
+### Duration: 20–30 minutes
+### =====================================
 ```
-# 📁 Directory Structure:
-# jinja2-test-lab/
-# ├── inventory.ini
-# └── jinja2-tests-playbook.yml
+ 📁 Directory Structure:
+ jinja2-test-lab/
+ ├── inventory.ini
+ └── jinja2-tests-playbook.yml
 ```
-# =====================================
-# 🧰 SETUP INSTRUCTIONS
-# =====================================
+#### =====================================
+#### 🧰 SETUP INSTRUCTIONS
+#### =====================================
 
 ### Step 1: Create working directory
 ```bash
@@ -122,4 +122,4 @@ ansible-playbook -i inventory.ini jinja2-tests-playbook.yml
 
 
 
-# 🧠 Bonus Task: Modify one of the variables (e.g., make `score = 21`) and rerun the playbook to observe test behavior changes.
+### 🧠 Bonus Task: Modify one of the variables (e.g., make `score = 21`) and rerun the playbook to observe test behavior changes.
