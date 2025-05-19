@@ -23,13 +23,15 @@ cd ~/jinja2-test-lab
 ```
 
 # Step 2: Create inventory file
-```bash
+```yaml
 cat > inventory.ini <<EOF
 [local]
 localhost ansible_connection=local
 EOF
 ```
+
 # Step 3: Create the playbook file with test cases
+```bash
 cat > jinja2-tests-playbook.yml <<EOF
 - name: Jinja2 Test Scenarios Lab
 hosts: localhost
@@ -97,9 +99,12 @@ debug:
 msg: "admin exists in users"
 when: 'admin' in users
 EOF
+```
 
 # Step 4: Run the playbook
+```bash
 ansible-playbook -i inventory.ini jinja2-tests-playbook.yml
+```
 
 # =====================================
 # 📚 EXPLANATIONS

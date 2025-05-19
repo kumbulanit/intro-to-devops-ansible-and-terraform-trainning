@@ -13,16 +13,19 @@
 # =====================================
 
 # Step 1: Create your lab directory
+```bash
 mkdir -p ~/ansible-lab/{templates,vars}
 cd ~/ansible-lab
-
+```
 # Step 2: Create inventory file
+```bash
 cat > inventory.ini <<EOF
 [local]
 localhost ansible_connection=local
 EOF
-
+```
 # Step 3: Create variable file for external loading
+```bash
 cat > vars/userlist.yml <<EOF
 users:
 - name: alice
@@ -32,16 +35,20 @@ groups: sudo
 shell: /bin/zsh
 groups: developers
 EOF
+```
 
 # Step 4: Create a basic template file
+```bash
 cat > templates/welcome.j2 <<EOF
 Welcome {{ user }}!
 You're accessing this system with hostname {{ ansible_facts['hostname'] }}.
 EOF
+```
 
 # =====================================
 # 📄 PLAYBOOK: ansible-lab.yml
 # =====================================
+```bash
 cat > ansible-lab.yml <<EOF
 - name: Ansible Core Lab
 hosts: all
@@ -110,18 +117,25 @@ always:
 debug:
 msg: "Cleanup or final step regardless of failure"
 EOF
+```
 
 # =====================================
 # ▶️ HOW TO RUN
 # =====================================
 # Step 1: Ensure you are in the lab directory
+```bash
 cd ~/ansible-lab
+```
 
 # Step 2: Run the playbook
+```bash
 ansible-playbook -i inventory.ini ansible-lab.yml
+```
 
 # Step 3: View output files
+```bash
 cat /tmp/welcome_trainer.txt
+```
 
 # =====================================
 # 📚 LAB SUMMARY

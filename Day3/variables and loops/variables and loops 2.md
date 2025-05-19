@@ -14,16 +14,19 @@
 # =====================================
 
 # Step 1: Create your lab working directory
+```bash
 mkdir -p ~/ansible-vars-lab/{templates,vars}
 cd ~/ansible-vars-lab
-
+```
 # Step 2: Create your inventory file
+```bash
 cat > inventory.ini <<EOF
 [local]
 localhost ansible_connection=local
 EOF
-
+```
 # Step 3: Create template to test multiple variables
+```bash
 cat > templates/greeting.j2 <<EOF
 Hello {{ username }}!
 Your hostname is: {{ ansible_facts['hostname'] }}
@@ -31,10 +34,11 @@ You are running: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribut
 Current time: {{ current_time }}
 Debug mode: {{ debug_mode | default(false) }}
 EOF
-
+```
 # =====================================
 # 📄 PLAYBOOK: vars-lab.yml
 # =====================================
+```bash
 cat > vars-lab.yml <<EOF
 - name: Ansible Variables Lab (Simple to Advanced)
 hosts: all
@@ -122,22 +126,26 @@ always:
 debug:
 msg: "Block completed (success or fail)"
 EOF
-
+```
 # =====================================
 # ▶️ HOW TO EXECUTE LAB
 # =====================================
 # Step 1: Enter the directory
+```bash
 cd ~/ansible-vars-lab
-
-# Step 2: Run without extra-vars (observe default behavior)
+```
+####Step 2: Run without extra-vars (observe default behavior)
+```bash
 ansible-playbook -i inventory.ini vars-lab.yml
-
+```
 # Step 3: Run with a command-line override for debug mode
+```bash
 ansible-playbook -i inventory.ini vars-lab.yml --extra-vars "debug_mode=true"
-
+```
 # Step 4: View template output
+```bash
 cat /tmp/greeting_<your_username>.txt
-
+```
 # =====================================
 # 🧠 LAB OBJECTIVES & WHAT TO LEARN
 # =====================================
