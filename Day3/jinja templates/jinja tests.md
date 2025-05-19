@@ -6,26 +6,29 @@
 # 🧪 JINJA2 TEST SCENARIOS: TEST LAB
 # Duration: 20–30 minutes
 # =====================================
-
+```
 # 📁 Directory Structure:
 # jinja2-test-lab/
 # ├── inventory.ini
 # └── jinja2-tests-playbook.yml
-
+```
 # =====================================
 # 🧰 SETUP INSTRUCTIONS
 # =====================================
 
 # Step 1: Create working directory
+```bash
 mkdir -p ~/jinja2-test-lab
 cd ~/jinja2-test-lab
+```
 
 # Step 2: Create inventory file
+```bash
 cat > inventory.ini <<EOF
 [local]
 localhost ansible_connection=local
 EOF
-
+```
 # Step 3: Create the playbook file with test cases
 cat > jinja2-tests-playbook.yml <<EOF
 - name: Jinja2 Test Scenarios Lab
