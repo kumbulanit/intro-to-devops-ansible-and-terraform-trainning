@@ -1,0 +1,29 @@
+---
+- name: Scenario 4 - Boot VM from Volume
+  hosts: localhost
+  gather_facts: false
+  vars:
+    image_name: "ubuntu"
+    flavor_name: "m1.small"
+    network_name: "private"
+    keypair_name: "demo-key"
+    volume_name: "boot-volume"
+    instance_name: "vm-from-volume"
+    volume_size: 5
+  tasks:
+    - name: Create a volume from image
+      openstack.cloud.volume:
+        display_name: "{{ volume_name }}"
+        size: "{{ volume_size }}"
+        image: "{{ image_name }}"
+        bootable: true
+        state: present
+
+    - name: Launch VM from volume
+      openstack.cloud.server:
+        name: "{{ instance_name }}"
+        flavor: "{{ flavor_name }}"
+        network: "{{ network_name }}"
+        key_name: "{{ keypair_name }}"
+        boot_volume: "{{ volume_name }}"
+        auto_ip: true

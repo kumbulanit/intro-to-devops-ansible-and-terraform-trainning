@@ -1,0 +1,8 @@
+---
+image_name: "ubuntu"
+flavor_name: "m1.small"
+network_name: "private"
+keypair_name: "demo-key"
+volume_name: "boot-volume"
+instance_name: "vm-from-volume"
+volume_size: 5

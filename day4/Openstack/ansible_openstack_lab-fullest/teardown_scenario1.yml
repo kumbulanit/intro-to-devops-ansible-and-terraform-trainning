@@ -1,0 +1,8 @@
+---
+- name: Teardown Scenario 1 - Basic VM
+  hosts: localhost
+  tasks:
+    - name: Delete instance
+      openstack.cloud.server:
+        name: "basic-vm"
+        state: absent

@@ -1,0 +1,31 @@
+---
+- name: Scenario 14 - HAProxy with Template
+  hosts: localhost
+  gather_facts: false
+  vars:
+    image_name: "ubuntu"
+    flavor_name: "m1.small"
+    frontend_name: "haproxy"
+    backend_prefix: "web"
+    backend_count: 2
+    network_name: "private"
+    keypair_name: "demo-key"
+  tasks:
+    - name: Deploy backend VMs
+      openstack.cloud.server:
+        name: "{{ backend_prefix }}{{ item }}"
+        image: "{{ image_name }}"
+        flavor: "{{ flavor_name }}"
+        network: "{{ network_name }}"
+        key_name: "{{ keypair_name }}"
+        auto_ip: true
+      loop: "{{ range(1, backend_count + 1) | list }}"
+
+    - name: Deploy HAProxy VM
+      openstack.cloud.server:
+        name: "{{ frontend_name }}"
+        image: "{{ image_name }}"
+        flavor: "{{ flavor_name }}"
+        network: "{{ network_name }}"
+        key_name: "{{ keypair_name }}"
+        auto_ip: true

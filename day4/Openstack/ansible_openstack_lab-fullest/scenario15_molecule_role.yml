@@ -1,0 +1,7 @@
+---
+- name: Scenario 15 - Deploy Role with Molecule Test
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - test_role
+# Setup Molecule in roles/test_role/molecule/default/molecule.yml

@@ -1,0 +1,12 @@
+---
+- name: Teardown Scenario 8 - Auto-Scaling Simulation
+  hosts: localhost
+  vars:
+    instance_prefix: "web"
+    count: 3
+  tasks:
+    - name: Delete scaled instances
+      openstack.cloud.server:
+        name: "{{ instance_prefix }}{{ item }}"
+        state: absent
+      loop: "{{ range(1, count + 1) | list }}"

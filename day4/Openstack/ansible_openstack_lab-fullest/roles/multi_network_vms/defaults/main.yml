@@ -1,0 +1,8 @@
+---
+frontend_net: "frontend-net"
+backend_net: "backend-net"
+frontend_vm: "frontend"
+backend_vm: "backend"
+image_name: "ubuntu"
+flavor_name: "m1.small"
+keypair_name: "demo-key"

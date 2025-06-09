@@ -1,0 +1,12 @@
+---
+- name: Scenario 6 - Assign Floating IP
+  hosts: localhost
+  gather_facts: false
+  vars:
+    server_name: "basic-vm"
+  tasks:
+    - name: Allocate floating IP
+      openstack.cloud.floating_ip:
+        network: public
+        server: "{{ server_name }}"
+        reuse: true

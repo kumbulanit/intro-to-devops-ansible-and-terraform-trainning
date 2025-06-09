@@ -1,0 +1,20 @@
+---
+- name: Create networks
+  openstack.cloud.network:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ frontend_net }}"
+    - "{{ backend_net }}"
+
+- name: Create frontend and backend VMs
+  openstack.cloud.server:
+    name: "{{ item.name }}"
+    image: "{{ image_name }}"
+    flavor: "{{ flavor_name }}"
+    networks:
+      - name: "{{ item.net }}"
+    key_name: "{{ keypair_name }}"
+  loop:
+    - { name: "{{ frontend_vm }}", net: "{{ frontend_net }}" }
+    - { name: "{{ backend_vm }}", net: "{{ backend_net }}" }

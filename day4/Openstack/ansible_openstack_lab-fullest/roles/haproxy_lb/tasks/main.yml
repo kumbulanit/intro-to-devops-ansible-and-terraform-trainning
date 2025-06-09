@@ -1,0 +1,19 @@
+---
+- name: Deploy backend VMs
+  openstack.cloud.server:
+    name: "{{ backend_prefix }}{{ item }}"
+    image: "{{ image_name }}"
+    flavor: "{{ flavor_name }}"
+    network: "{{ network_name }}"
+    key_name: "{{ keypair_name }}"
+    auto_ip: true
+  loop: "{{ range(1, backend_count + 1) | list }}"
+
+- name: Deploy HAProxy VM
+  openstack.cloud.server:
+    name: "{{ frontend_name }}"
+    image: "{{ image_name }}"
+    flavor: "{{ flavor_name }}"
+    network: "{{ network_name }}"
+    key_name: "{{ keypair_name }}"
+    auto_ip: true

@@ -1,0 +1,6 @@
+---
+image_name: "ubuntu"
+flavor_name: "m1.small"
+network_name: "private"
+keypair_name: "demo-key"
+instance_name: "basic-vm"

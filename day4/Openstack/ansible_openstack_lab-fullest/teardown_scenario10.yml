@@ -1,0 +1,6 @@
+---
+- name: Teardown Scenario 10 - General Teardown
+  hosts: localhost
+  tasks:
+    - debug:
+        msg: "This scenario already covers resource deletion."

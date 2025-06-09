@@ -1,0 +1,70 @@
+---
+- name: Create SSH keypair
+  openstack.cloud.keypair:
+    name: "{{ keypair_name }}"
+    public_key_file: "~/.ssh/id_rsa.pub"
+
+- name: Create network
+  openstack.cloud.network:
+    name: "{{ network_name }}"
+    state: present
+
+- name: Create subnet
+  openstack.cloud.subnet:
+    name: "{{ subnet_name }}"
+    network_name: "{{ network_name }}"
+    cidr: "{{ subnet_cidr }}"
+    ip_version: 4
+    enable_dhcp: true
+
+- name: Create router
+  openstack.cloud.router:
+    name: "{{ router_name }}"
+    network: public
+    state: present
+
+- name: Attach subnet to router
+  openstack.cloud.router_interface:
+    router: "{{ router_name }}"
+    subnet: "{{ subnet_name }}"
+    state: present
+
+- name: Create security group
+  openstack.cloud.security_group:
+    name: "{{ secgroup_name }}"
+    description: "Allow SSH and HTTP"
+
+- name: Allow SSH
+  openstack.cloud.security_group_rule:
+    security_group: "{{ secgroup_name }}"
+    protocol: tcp
+    port_range_min: 22
+    port_range_max: 22
+    direction: ingress
+
+- name: Allow HTTP
+  openstack.cloud.security_group_rule:
+    security_group: "{{ secgroup_name }}"
+    protocol: tcp
+    port_range_min: 80
+    port_range_max: 80
+    direction: ingress
+
+- name: Launch instance with Nginx
+  openstack.cloud.server:
+    name: "{{ instance_name }}"
+    image: "{{ image_name }}"
+    flavor: "{{ flavor_name }}"
+    network: "{{ network_name }}"
+    key_name: "{{ keypair_name }}"
+    security_groups:
+      - "{{ secgroup_name }}"
+    user_data: "{{ user_data }}"
+    auto_ip: true
+
+- name: Wait for SSH to be ready
+  wait_for:
+    port: 22
+    host: "{{ hostvars.localhost.openstack.cloud.server.public_v4 }}"
+    state: started
+    timeout: 300

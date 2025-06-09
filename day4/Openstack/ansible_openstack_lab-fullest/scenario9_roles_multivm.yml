@@ -1,0 +1,7 @@
+---
+- name: Scenario 9 - Multi-VM with Role (structure example)
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - vm_deployment
+# Place role in roles/vm_deployment/tasks/main.yml

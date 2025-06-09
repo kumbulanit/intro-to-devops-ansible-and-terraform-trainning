@@ -1,0 +1,9 @@
+---
+- name: Launch test role VM
+  openstack.cloud.server:
+    name: "{{ instance_name }}"
+    image: "{{ image_name }}"
+    flavor: "{{ flavor_name }}"
+    network: "{{ network_name }}"
+    key_name: "{{ keypair_name }}"
+    auto_ip: true

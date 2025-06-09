@@ -1,0 +1,33 @@
+---
+- name: Scenario 10 - Teardown Resources
+  hosts: localhost
+  gather_facts: false
+  vars:
+    servers_to_delete: ["basic-vm", "frontend", "backend", "vm-from-volume"]
+    networks_to_delete: ["frontend-net", "backend-net", "training-net"]
+    router_name: "training-router"
+  tasks:
+    - name: Delete servers
+      openstack.cloud.server:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ servers_to_delete }}"
+
+    - name: Remove router interface
+      openstack.cloud.router_interface:
+        router: "{{ router_name }}"
+        subnet: "training-subnet"
+        state: absent
+      ignore_errors: true
+
+    - name: Delete router
+      openstack.cloud.router:
+        name: "{{ router_name }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Delete networks
+      openstack.cloud.network:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ networks_to_delete }}"

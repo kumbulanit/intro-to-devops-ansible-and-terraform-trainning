@@ -1,0 +1,6 @@
+---
+- name: Full Stack NGINX VM Deployment
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - full_stack_nginx

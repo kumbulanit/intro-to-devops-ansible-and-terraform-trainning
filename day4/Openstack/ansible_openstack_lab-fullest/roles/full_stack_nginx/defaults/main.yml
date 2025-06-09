@@ -1,0 +1,14 @@
+---
+image_name: "ubuntu"
+flavor_name: "m1.small"
+network_name: "nginx-net"
+subnet_name: "nginx-subnet"
+subnet_cidr: "192.168.60.0/24"
+router_name: "nginx-router"
+secgroup_name: "nginx-secgroup"
+keypair_name: "demo-key"
+instance_name: "nginx-vm"
+user_data: |
+  #!/bin/bash
+  apt update
+  apt install -y nginx

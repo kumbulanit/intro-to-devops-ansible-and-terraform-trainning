@@ -1,0 +1,21 @@
+---
+- name: Scenario 8 - Auto-Scaling Simulation
+  hosts: localhost
+  gather_facts: false
+  vars:
+    image_name: "ubuntu"
+    flavor_name: "m1.small"
+    network_name: "private"
+    keypair_name: "demo-key"
+    instance_prefix: "web"
+    count: 3
+  tasks:
+    - name: Launch multiple web VMs
+      openstack.cloud.server:
+        name: "{{ instance_prefix }}{{ item }}"
+        image: "{{ image_name }}"
+        flavor: "{{ flavor_name }}"
+        network: "{{ network_name }}"
+        key_name: "{{ keypair_name }}"
+        auto_ip: true
+      loop: "{{ range(1, count + 1) | list }}"

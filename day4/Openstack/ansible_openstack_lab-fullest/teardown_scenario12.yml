@@ -1,0 +1,11 @@
+---
+- name: Teardown Scenario 12 - LAMP Stack
+  hosts: localhost
+  tasks:
+    - name: Delete LAMP VMs
+      openstack.cloud.server:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - lamp-web
+        - lamp-db

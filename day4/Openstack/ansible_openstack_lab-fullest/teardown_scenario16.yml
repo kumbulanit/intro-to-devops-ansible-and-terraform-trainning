@@ -1,0 +1,40 @@
+---
+- name: Teardown Scenario 16 - Full Stack NGINX Deployment
+  hosts: localhost
+  tasks:
+    - name: Delete instance
+      openstack.cloud.server:
+        name: "nginx-vm"
+        state: absent
+      ignore_errors: true
+
+    - name: Detach subnet from router
+      openstack.cloud.router_interface:
+        router: "nginx-router"
+        subnet: "nginx-subnet"
+        state: absent
+      ignore_errors: true
+
+    - name: Delete router
+      openstack.cloud.router:
+        name: "nginx-router"
+        state: absent
+      ignore_errors: true
+
+    - name: Delete subnet
+      openstack.cloud.subnet:
+        name: "nginx-subnet"
+        state: absent
+      ignore_errors: true
+
+    - name: Delete network
+      openstack.cloud.network:
+        name: "nginx-net"
+        state: absent
+      ignore_errors: true
+
+    - name: Delete security group
+      openstack.cloud.security_group:
+        name: "nginx-secgroup"
+        state: absent
+      ignore_errors: true

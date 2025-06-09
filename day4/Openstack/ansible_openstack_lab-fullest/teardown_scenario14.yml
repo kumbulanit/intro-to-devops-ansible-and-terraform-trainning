@@ -1,0 +1,18 @@
+---
+- name: Teardown Scenario 14 - Load Balancer Setup
+  hosts: localhost
+  vars:
+    backend_prefix: "web"
+    backend_count: 2
+    frontend_name: "haproxy"
+  tasks:
+    - name: Delete HAProxy VM
+      openstack.cloud.server:
+        name: "{{ frontend_name }}"
+        state: absent
+
+    - name: Delete backend VMs
+      openstack.cloud.server:
+        name: "{{ backend_prefix }}{{ item }}"
+        state: absent
+      loop: "{{ range(1, backend_count + 1) | list }}"

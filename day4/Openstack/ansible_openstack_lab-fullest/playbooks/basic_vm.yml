@@ -1,0 +1,5 @@
+---
+- name: Deploy Basic VM using Role
+  hosts: localhost
+  roles:
+    - role: basic_vm

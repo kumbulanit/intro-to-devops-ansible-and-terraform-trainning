@@ -1,0 +1,28 @@
+---
+- name: Scenario 12 - LAMP Stack Deployment
+  hosts: localhost
+  gather_facts: false
+  vars:
+    image_name: "ubuntu"
+    flavor_name: "m1.small"
+    network_name: "private"
+    keypair_name: "demo-key"
+  tasks:
+    - block:
+        - name: Deploy Apache + PHP VM
+          openstack.cloud.server:
+            name: "lamp-web"
+            image: "{{ image_name }}"
+            flavor: "{{ flavor_name }}"
+            network: "{{ network_name }}"
+            key_name: "{{ keypair_name }}"
+            auto_ip: true
+
+        - name: Deploy MySQL VM
+          openstack.cloud.server:
+            name: "lamp-db"
+            image: "{{ image_name }}"
+            flavor: "{{ flavor_name }}"
+            network: "{{ network_name }}"
+            key_name: "{{ keypair_name }}"
+            auto_ip: true

@@ -1,0 +1,5 @@
+---
+- name: Deploy HAProxy Load Balancer using Role
+  hosts: localhost
+  roles:
+    - role: haproxy_lb

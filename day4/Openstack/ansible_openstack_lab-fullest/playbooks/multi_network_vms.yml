@@ -1,0 +1,5 @@
+---
+- name: Deploy Multi-Network VMs using Role
+  hosts: localhost
+  roles:
+    - role: multi_network_vms

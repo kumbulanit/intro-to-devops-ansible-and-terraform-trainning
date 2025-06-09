@@ -1,0 +1,6 @@
+---
+- name: Teardown Scenario 13 - Vault Example (No Resources)
+  hosts: localhost
+  tasks:
+    - debug:
+        msg: "No resources created in this scenario."

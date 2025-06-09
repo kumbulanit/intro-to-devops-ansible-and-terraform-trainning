@@ -1,0 +1,8 @@
+---
+frontend_name: "haproxy"
+backend_prefix: "web"
+backend_count: 2
+image_name: "ubuntu"
+flavor_name: "m1.small"
+network_name: "private"
+keypair_name: "demo-key"

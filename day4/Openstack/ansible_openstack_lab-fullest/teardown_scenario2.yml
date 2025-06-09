@@ -1,0 +1,14 @@
+---
+- name: Teardown Scenario 2 - Network/Subnet
+  hosts: localhost
+  tasks:
+    - name: Delete subnet
+      openstack.cloud.subnet:
+        name: "training-subnet"
+        state: absent
+      ignore_errors: true
+
+    - name: Delete network
+      openstack.cloud.network:
+        name: "training-net"
+        state: absent

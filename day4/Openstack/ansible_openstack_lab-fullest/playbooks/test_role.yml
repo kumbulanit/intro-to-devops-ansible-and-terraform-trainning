@@ -1,0 +1,5 @@
+---
+- name: Deploy Test Role VM
+  hosts: localhost
+  roles:
+    - role: test_role

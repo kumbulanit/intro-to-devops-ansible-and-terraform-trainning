@@ -1,0 +1,5 @@
+---
+- name: Boot VM from Volume using Role
+  hosts: localhost
+  roles:
+    - role: boot_from_volume

@@ -1,0 +1,8 @@
+---
+- name: Teardown Scenario 5 - Security Group
+  hosts: localhost
+  tasks:
+    - name: Delete security group
+      openstack.cloud.security_group:
+        name: "web-secgroup"
+        state: absent

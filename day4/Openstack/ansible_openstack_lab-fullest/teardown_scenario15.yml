@@ -1,0 +1,9 @@
+---
+- name: Teardown Scenario 15 - Molecule Role Example
+  hosts: localhost
+  tasks:
+    - name: Delete test_role VM
+      openstack.cloud.server:
+        name: "test-role-vm"
+        state: absent
+      ignore_errors: true

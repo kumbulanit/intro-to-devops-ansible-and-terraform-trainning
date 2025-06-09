@@ -1,0 +1,24 @@
+---
+- name: Scenario 11 - Inject Metadata and User Data
+  hosts: localhost
+  gather_facts: false
+  vars:
+    image_name: "ubuntu"
+    flavor_name: "m1.small"
+    network_name: "private"
+    keypair_name: "demo-key"
+    instance_name: "vm-with-userdata"
+    user_data: |
+      #!/bin/bash
+      apt update
+      apt install -y nginx
+  tasks:
+    - name: Launch instance with user_data
+      openstack.cloud.server:
+        name: "{{ instance_name }}"
+        image: "{{ image_name }}"
+        flavor: "{{ flavor_name }}"
+        network: "{{ network_name }}"
+        key_name: "{{ keypair_name }}"
+        user_data: "{{ user_data }}"
+        auto_ip: true

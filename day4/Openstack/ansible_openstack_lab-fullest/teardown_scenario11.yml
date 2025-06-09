@@ -1,0 +1,8 @@
+---
+- name: Teardown Scenario 11 - Metadata/User Data VM
+  hosts: localhost
+  tasks:
+    - name: Delete instance
+      openstack.cloud.server:
+        name: "vm-with-userdata"
+        state: absent

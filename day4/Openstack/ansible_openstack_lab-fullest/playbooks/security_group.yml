@@ -1,0 +1,5 @@
+---
+- name: Create Security Group using Role
+  hosts: localhost
+  roles:
+    - role: security_group

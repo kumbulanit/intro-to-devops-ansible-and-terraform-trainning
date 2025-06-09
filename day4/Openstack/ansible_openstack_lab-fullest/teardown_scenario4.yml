@@ -1,0 +1,13 @@
+---
+- name: Teardown Scenario 4 - Boot from Volume
+  hosts: localhost
+  tasks:
+    - name: Delete VM
+      openstack.cloud.server:
+        name: "vm-from-volume"
+        state: absent
+
+    - name: Delete volume
+      openstack.cloud.volume:
+        display_name: "boot-volume"
+        state: absent

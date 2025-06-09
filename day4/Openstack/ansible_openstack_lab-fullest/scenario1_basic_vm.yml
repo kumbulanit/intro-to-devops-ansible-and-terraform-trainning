@@ -1,0 +1,31 @@
+---
+- name: Scenario 1 - Basic VM Provisioning
+  hosts: localhost
+  gather_facts: false
+  vars:
+    image_name: "ubuntu"
+    flavor_name: "m1.small"
+    network_name: "private"
+    keypair_name: "demo-key"
+    instance_name: "basic-vm"
+  tasks:
+    - name: Create SSH keypair if it doesn't exist
+      openstack.cloud.keypair:
+        name: "{{ keypair_name }}"
+        public_key_file: "~/.ssh/id_rsa.pub"
+
+    - name: Launch a basic VM
+      openstack.cloud.server:
+        name: "{{ instance_name }}"
+        image: "{{ image_name }}"
+        flavor: "{{ flavor_name }}"
+        network: "{{ network_name }}"
+        key_name: "{{ keypair_name }}"
+        auto_ip: true
+
+    - name: Wait for SSH to become available
+      wait_for:
+        port: 22
+        host: "{{ hostvars.localhost.openstack.cloud.server.public_v4 }}"
+        timeout: 300
+        state: started

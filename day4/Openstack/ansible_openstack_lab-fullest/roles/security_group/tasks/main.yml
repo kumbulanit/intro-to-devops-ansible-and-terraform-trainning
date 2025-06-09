@@ -1,0 +1,21 @@
+---
+- name: Create security group
+  openstack.cloud.security_group:
+    name: "{{ secgroup_name }}"
+    description: "Allow SSH and HTTP"
+
+- name: Add SSH rule
+  openstack.cloud.security_group_rule:
+    security_group: "{{ secgroup_name }}"
+    protocol: tcp
+    port_range_min: 22
+    port_range_max: 22
+    direction: ingress
+
+- name: Add HTTP rule
+  openstack.cloud.security_group_rule:
+    security_group: "{{ secgroup_name }}"
+    protocol: tcp
+    port_range_min: 80
+    port_range_max: 80
+    direction: ingress

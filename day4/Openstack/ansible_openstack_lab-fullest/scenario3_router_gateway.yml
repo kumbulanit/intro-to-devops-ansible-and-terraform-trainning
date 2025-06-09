@@ -1,0 +1,20 @@
+---
+- name: Scenario 3 - Router and Gateway Setup
+  hosts: localhost
+  gather_facts: false
+  vars:
+    router_name: "training-router"
+    ext_net: "public"
+    subnet_name: "training-subnet"
+  tasks:
+    - name: Create router
+      openstack.cloud.router:
+        name: "{{ router_name }}"
+        network: "{{ ext_net }}"
+        state: present
+
+    - name: Attach router to subnet
+      openstack.cloud.router_interface:
+        router: "{{ router_name }}"
+        subnet: "{{ subnet_name }}"
+        state: present

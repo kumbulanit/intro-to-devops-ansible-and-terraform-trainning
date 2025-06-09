@@ -1,0 +1,19 @@
+---
+- name: Teardown Scenario 7 - Multi-Network VMs
+  hosts: localhost
+  tasks:
+    - name: Delete frontend and backend VMs
+      openstack.cloud.server:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - frontend
+        - backend
+
+    - name: Delete frontend and backend networks
+      openstack.cloud.network:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - frontend-net
+        - backend-net

@@ -1,0 +1,6 @@
+---
+- name: Teardown Scenario 6 - Floating IP (manual disassociate)
+  hosts: localhost
+  tasks:
+    - debug:
+        msg: "Floating IPs can be manually deleted if not reused."
