@@ -116,7 +116,7 @@ clouds:
     identity_api_version: 3
 EOF
 ```
-
+NB:REPLACE 127.0.0.1 WITH YOUR HOST IP OR HOSTNAME
 ---
 
 ## 📘 Part 4: Ansible Module Playbooks (Run Each Separately - 15 mins)
