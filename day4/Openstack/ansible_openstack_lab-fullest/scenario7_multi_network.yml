@@ -10,7 +10,7 @@
     backend_subnet: "backend-subnet"
     frontend_vm: "frontend"
     backend_vm: "backend"
-    image_name: "ubuntu-22.04"
+    image_name: "ubuntu-24.04"
     flavor_name: "m1.small"
     keypair_name: "demo-key"
     security_group_name: "multi-net-sg"

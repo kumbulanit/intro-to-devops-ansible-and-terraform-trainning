@@ -15,12 +15,12 @@
       min_ram: 64
       description: "Tiny Linux (13MB) - Perfect for testing"
 
-    - name: "ubuntu-22.04"
-      url: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
+    - name: "ubuntu-24.04"
+      url: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
       format: "qcow2"
       min_disk: 3
       min_ram: 512
-      description: "Ubuntu 22.04 LTS Server (600MB)"
+      description: "Ubuntu 24.04 LTS Server (700MB)"
 
     - name: "debian-12"
       url: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
@@ -50,11 +50,11 @@
         ╔════════════════════════════════════════════════════════════════╗
         ║     OpenStack Image Prerequisites Setup                       ║
         ║     This playbook will download and upload 5 images:          ║
-        ║     1. CirrOS 0.6.2 (13MB) - Minimal test image              ║
-        ║     2. Ubuntu 22.04 LTS (600MB) - Production ready           ║
-        ║     3. Debian 12 (400MB) - Stable release                    ║
-        ║     4. Alpine 3.19 (50MB) - Ultra lightweight                ║
-        ║     5. Fedora 39 (500MB) - Latest features                   ║
+        ║     1. CirrOS 0.6.2 (13MB) - Minimal test image               ║
+        ║     2. Ubuntu 24.04 LTS (700MB) - Production ready            ║
+        ║     3. Debian 12 (400MB) - Stable release                     ║
+        ║     4. Alpine 3.19 (50MB) - Ultra lightweight                 ║
+        ║     5. Fedora 39 (500MB) - Latest features                    ║
         ╚════════════════════════════════════════════════════════════════╝
 
   - name: Create download directory
@@ -218,11 +218,11 @@
         3. Run any scenario playbook, for example:
            ansible-playbook scenario1_basic_vm.yml
 
-        Quick Image Reference:
-        - cirros-0.6.2: Fastest boot, minimal testing
-        - ubuntu-22.04: Production workloads, full Ubuntu features
-        - debian-12: Stable, reliable, Debian ecosystem
-        - alpine-3.19: Ultra-light, container-friendly
-        - fedora-39: Latest packages, cutting edge features
+    Quick Image Reference:
+    - cirros-0.6.2: Fastest boot, minimal testing
+    - ubuntu-24.04: Production workloads, full Ubuntu features
+    - debian-12: Stable, reliable, Debian ecosystem
+    - alpine-3.19: Ultra-light, container-friendly
+    - fedora-39: Latest packages, cutting edge features
 
         All images are cloud-init enabled and bootable!

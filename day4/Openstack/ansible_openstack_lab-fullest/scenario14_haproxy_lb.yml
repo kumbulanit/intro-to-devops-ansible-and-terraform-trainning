@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     cloud_name: "mycloud"
-    image_name: "ubuntu-22.04"
+    image_name: "ubuntu-24.04"
     flavor_name: "m1.small"
     frontend_name: "haproxy"
     backend_prefix: "web"

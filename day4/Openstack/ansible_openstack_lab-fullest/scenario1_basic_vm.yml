@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     cloud_name: "mycloud"
-    image_name: "ubuntu-22.04"
+    image_name: "ubuntu-24.04"
     flavor_name: "m1.small"
     network_name: "private"
     keypair_name: "demo-key"
@@ -12,124 +12,145 @@
     security_group_name: "basic-sg"
     volume_name: "basic-vm-volume"
     volume_size: 10
-  
-  tasks:
-    - name: Ensure network exists
-      openstack.cloud.network:
-        cloud: "{{ cloud_name }}"
-        name: "{{ network_name }}"
-        state: present
-      register: network_result
-    
-    - name: Ensure subnet exists for network
-      openstack.cloud.subnet:
-        cloud: "{{ cloud_name }}"
-        name: "{{ network_name }}-subnet"
-        network_name: "{{ network_name }}"
-        cidr: "192.168.100.0/24"
-        ip_version: 4
-        dns_nameservers:
-          - 8.8.8.8
-          - 1.1.1.1
-        enable_dhcp: true
-        state: present
-      when: network_result.changed
-    
-    - name: Create security group
-      openstack.cloud.security_group:
-        cloud: "{{ cloud_name }}"
-        name: "{{ security_group_name }}"
-        description: "Security group for basic VM"
-        state: present
-    
-    - name: Add SSH rule to security group
-      openstack.cloud.security_group_rule:
-        cloud: "{{ cloud_name }}"
-        security_group: "{{ security_group_name }}"
-        protocol: tcp
-        port_range_min: 22
-        port_range_max: 22
-        remote_ip_prefix: 0.0.0.0/0
-        direction: ingress
-        state: present
-      ignore_errors: yes
-    
-    - name: Add ICMP rule to security group
-      openstack.cloud.security_group_rule:
-        cloud: "{{ cloud_name }}"
-        security_group: "{{ security_group_name }}"
-        protocol: icmp
-        remote_ip_prefix: 0.0.0.0/0
-        direction: ingress
-        state: present
-      ignore_errors: yes
-    
-    - name: Create SSH keypair if it doesn't exist
-      openstack.cloud.keypair:
-        cloud: "{{ cloud_name }}"
-        name: "{{ keypair_name }}"
-        public_key_file: "~/.ssh/id_rsa.pub"
-        state: present
-    
-    - name: Create volume for VM
-      openstack.cloud.volume:
-        cloud: "{{ cloud_name }}"
-        display_name: "{{ volume_name }}"
-        size: "{{ volume_size }}"
-        image: "{{ image_name }}"
-        bootable: true
-        state: present
-      register: volume_result
-    
-    - name: Wait for volume to be available
-      openstack.cloud.volume_info:
-        cloud: "{{ cloud_name }}"
-        name: "{{ volume_name }}"
-      register: volume_check
-      until: 
-        - volume_check.volumes | length > 0
-        - volume_check.volumes[0].status in ['available', 'error']
-      retries: 30
-      delay: 5
-      failed_when: volume_check.volumes[0].status == 'error'
-    
-    - name: Ensure volume is marked as bootable
-      command: "openstack volume set --bootable {{ volume_name }}"
-      environment:
-        OS_CLOUD: "{{ cloud_name }}"
-      ignore_errors: yes
-    
-    - name: Display volume information
-      debug:
-        msg: |
-          Volume created:
-          Name: {{ volume_check.volumes[0].name }}
-          ID: {{ volume_check.volumes[0].id }}
-          Status: {{ volume_check.volumes[0].status }}
-          Size: {{ volume_check.volumes[0].size }} GB
-          Bootable: {{ volume_check.volumes[0].is_bootable }}
-    
-    - name: Launch a basic VM with volume
-      openstack.cloud.server:
-        cloud: "{{ cloud_name }}"
-        name: "{{ instance_name }}"
-        flavor: "{{ flavor_name }}"
-        network: "{{ network_name }}"
-        key_name: "{{ keypair_name }}"
-        security_groups:
-          - "{{ security_group_name }}"
-        boot_volume: "{{ volume_name }}"
-        terminate_volume: false
-        auto_ip: true
-        wait: yes
-        timeout: 600
-      register: server_result
 
-    - name: Display server information
-      debug:
-        msg: |
-          Server created successfully:
-          Name: {{ server_result.server.name }}
-          ID: {{ server_result.server.id }}
-          Status: {{ server_result.server.status }}
-          Networks: {{ server_result.server.addresses }}
+  tasks:
+  - name: Ensure network exists
+    openstack.cloud.network:
+      cloud: "{{ cloud_name }}"
+      name: "{{ network_name }}"
+      state: present
+    register: network_result
+
+  - name: Ensure subnet exists for network
+    openstack.cloud.subnet:
+      cloud: "{{ cloud_name }}"
+      name: "{{ network_name }}-subnet"
+      network_name: "{{ network_name }}"
+      cidr: "192.168.100.0/24"
+      ip_version: 4
+      dns_nameservers:
+      - 8.8.8.8
+      - 1.1.1.1
+      enable_dhcp: true
+      state: present
+    when: network_result.changed
+
+  - name: Create security group
+    openstack.cloud.security_group:
+      cloud: "{{ cloud_name }}"
+      name: "{{ security_group_name }}"
+      description: "Security group for basic VM"
+      state: present
+
+  - name: Add SSH rule to security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: tcp
+      port_range_min: 22
+      port_range_max: 22
+      remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+      state: present
+    ignore_errors: yes
+
+  - name: Add ICMP rule to security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: icmp
+      remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+      state: present
+    ignore_errors: yes
+
+  - name: Create SSH keypair if it doesn't exist
+    openstack.cloud.keypair:
+      cloud: "{{ cloud_name }}"
+      name: "{{ keypair_name }}"
+      public_key_file: "~/.ssh/id_rsa.pub"
+      state: present
+
+  - name: Create volume for VM
+    openstack.cloud.volume:
+      cloud: "{{ cloud_name }}"
+      display_name: "{{ volume_name }}"
+      size: "{{ volume_size }}"
+      image: "{{ image_name }}"
+      bootable: true
+      state: present
+    register: volume_result
+
+  - name: Record created volume id
+    set_fact:
+      created_volume_id: "{{ volume_result.volume.id | default(volume_result.id) }}"
+
+  - name: Wait for volume to be available
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      filters:
+        id: "{{ created_volume_id }}"
+    register: volume_check
+    until:
+    - volume_check.volumes | length > 0
+    - volume_check.volumes[0].status in ['available', 'error']
+    retries: 30
+    delay: 5
+    failed_when: volume_check.volumes[0].status == 'error'
+
+  - name: Ensure volume is marked as bootable
+    command: "openstack volume set --bootable {{ created_volume_id }}"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+
+  - name: Cache latest volume details
+    set_fact:
+      volume_details: "{{ volume_check.volumes[0] }}"
+
+  - name: Check for other volumes with the same display name
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ volume_name }}"
+    register: volume_name_collisions
+
+  - name: Warn about duplicate volume names
+    when: volume_name_collisions.volumes | length > 1
+    debug:
+      msg: >-
+        Multiple volumes ({{ volume_name_collisions.volumes | length }}) share the name '{{ volume_name }}'. This scenario will use volume ID {{ volume_details.id }}. Consider cleaning up older volumes with 'openstack volume delete <volume-id>'.
+
+  - name: Display volume information
+    debug:
+      msg: |
+        Volume created:
+        Name: {{ volume_details.name }}
+        ID: {{ volume_details.id }}
+        Status: {{ volume_details.status }}
+        Size: {{ volume_details.size }} GB
+        Bootable: {{ volume_details.is_bootable }}
+
+  - name: Launch a basic VM with volume
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "{{ instance_name }}"
+      flavor: "{{ flavor_name }}"
+      network: "{{ network_name }}"
+      key_name: "{{ keypair_name }}"
+      security_groups:
+      - "{{ security_group_name }}"
+      boot_volume: "{{ volume_details.id }}"
+      terminate_volume: false
+      auto_ip: true
+      wait: yes
+      timeout: 600
+    register: server_result
+
+  - name: Display server information
+    debug:
+      msg: |
+        Server created successfully:
+        Name: {{ server_result.server.name }}
+        ID: {{ server_result.server.id }}
+        Status: {{ server_result.server.status }}
+        Networks: {{ server_result.server.addresses }}

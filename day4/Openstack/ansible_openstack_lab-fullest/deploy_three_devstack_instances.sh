@@ -63,7 +63,7 @@ ensure_container() {
   fi
 
   echo "[INFO] Creating container $instance"
-  lxc init images:ubuntu/22.04 "$instance"
+  lxc init images:ubuntu/24.04 "$instance"
   if lxc config device show "$instance" | grep -q "eth0"; then
     lxc config device remove "$instance" eth0
   fi

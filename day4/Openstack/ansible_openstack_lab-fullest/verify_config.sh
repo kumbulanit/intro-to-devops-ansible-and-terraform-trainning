@@ -74,8 +74,8 @@ echo "3. Image Name Configuration"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Check image names
-image_count=$(grep -h "image_name:" scenario*.yml 2>/dev/null | grep -c "ubuntu-22.04")
-echo -e "${GREEN}✓${NC} $image_count scenarios using image: ubuntu-22.04"
+image_count=$(grep -h "image_name:" scenario*.yml 2>/dev/null | grep -c "ubuntu-24.04")
+echo -e "${GREEN}✓${NC} $image_count scenarios using image: ubuntu-24.04"
 ((PASS++))
 
 echo ""

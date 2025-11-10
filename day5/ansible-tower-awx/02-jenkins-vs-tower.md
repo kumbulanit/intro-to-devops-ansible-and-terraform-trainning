@@ -46,9 +46,10 @@ Both **Jenkins** and **Ansible Tower/AWX** can orchestrate Ansible playbooks, bu
 
 ## 💡 When to Choose Jenkins
 
-### ✅ Choose Jenkins When:
+### ✅ Choose Jenkins When
 
 #### 1. **You Need CI/CD Beyond Ansible**
+
 ```groovy
 // Jenkins can do it all
 pipeline {
@@ -76,11 +77,13 @@ pipeline {
 ```
 
 #### 2. **Budget Constraints**
+
 - Jenkins is completely free
 - No per-node licensing
 - Large community support
 
 #### 3. **Complex Pipelines**
+
 ```groovy
 // Multi-branch, conditional, parallel execution
 pipeline {
@@ -110,16 +113,19 @@ pipeline {
 ```
 
 #### 4. **Existing Jenkins Infrastructure**
+
 - Already have Jenkins deployed
 - Teams familiar with Jenkins
 - Integration with existing pipelines
 
 #### 5. **Need for Extensive Integrations**
+
 - Jenkins has 1800+ plugins
 - Integrates with almost everything
 - Easy custom plugin development
 
 #### 6. **GitOps Workflow**
+
 ```groovy
 // Jenkinsfile stored with code
 // Automatic pipeline from repo
@@ -146,14 +152,16 @@ pipeline {
 
 ## 💡 When to Choose Ansible Tower/AWX
 
-### ✅ Choose Tower/AWX When:
+### ✅ Choose Tower/AWX When
 
 #### 1. **Ansible-Only Environment**
+
 - Primary tool is Ansible
 - No need for general CI/CD
 - Want Ansible-specific features
 
 #### 2. **Need Advanced RBAC**
+
 ```
 Organization Structure:
 ├── Network Team
@@ -165,16 +173,19 @@ Organization Structure:
 ```
 
 #### 3. **Non-Technical Users**
+
 - Need self-service portal
 - Survey forms for parameters
 - Visual job monitoring
 
 #### 4. **Enterprise Compliance**
+
 - Detailed audit logs required
 - Role-based access mandatory
 - Need commercial support
 
 #### 5. **Built-in Inventory Management**
+
 - Dynamic inventory from multiple sources
 - Smart inventory filtering
 - Inventory-as-a-service
@@ -224,12 +235,14 @@ Organization Structure:
 ### 1. **Use Ansible Plugin**
 
 **Install:**
+
 ```bash
 # Jenkins UI: Manage Jenkins → Manage Plugins → Available
 # Search for "Ansible"
 ```
 
 **Configure:**
+
 ```groovy
 // Jenkinsfile
 pipeline {
@@ -414,6 +427,7 @@ ansibleDeploy(
 | Ansible Tower | $50,000+ | Red Hat subscription |
 
 **Additional Costs:**
+
 - Infrastructure (servers, storage)
 - Maintenance and support
 - Training
@@ -476,7 +490,7 @@ Solution: Jenkins + Tower
 
 ## 📊 Decision Matrix
 
-### Score each factor (1-5):
+### Score each factor (1-5)
 
 | Factor | Weight | Jenkins | Tower/AWX |
 |--------|--------|---------|-----------|
@@ -495,7 +509,8 @@ Solution: Jenkins + Tower
 
 ## ✅ Recommendation Summary
 
-### Choose **Jenkins** if:
+### Choose **Jenkins** if
+
 - ✅ You need full CI/CD capabilities
 - ✅ Budget is constrained
 - ✅ Team is technical
@@ -503,21 +518,24 @@ Solution: Jenkins + Tower
 - ✅ Want pipeline-as-code
 - ✅ Multiple automation types
 
-### Choose **Ansible Tower** if:
+### Choose **Ansible Tower** if
+
 - ✅ Enterprise budget available
 - ✅ Need commercial support
 - ✅ Compliance requirements
 - ✅ Non-technical users
 - ✅ Ansible-only environment
 
-### Choose **AWX** if:
+### Choose **AWX** if
+
 - ✅ Limited budget
 - ✅ Want Tower features
 - ✅ Comfortable with self-support
 - ✅ Ansible-focused
 - ✅ Development/testing
 
-### Use **Both** if:
+### Use **Both** if
+
 - ✅ Large organization
 - ✅ Different team needs
 - ✅ Budget allows

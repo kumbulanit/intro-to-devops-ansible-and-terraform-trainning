@@ -75,8 +75,8 @@ launch_container() {
     return
   fi
 
-  echo "[INFO] Launching container ${name} (ubuntu:22.04)..."
-  lxc launch images:ubuntu/22.04 "${name}"
+  echo "[INFO] Launching container ${name} (ubuntu:24.04)..."
+  lxc launch images:ubuntu/24.04 "${name}"
 
   echo "[INFO] Enabling nesting inside ${name} for DevStack requirements..."
   lxc config set "${name}" security.nesting true
