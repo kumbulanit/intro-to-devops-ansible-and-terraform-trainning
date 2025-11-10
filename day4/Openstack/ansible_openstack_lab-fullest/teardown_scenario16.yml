@@ -1,40 +1,117 @@
 ---
-- name: Teardown Scenario 16 - Full Stack NGINX Deployment
+- name: Teardown Scenario 16 - Full Production Stack
   hosts: localhost
-  tasks:
-    - name: Delete instance
-      openstack.cloud.server:
-        name: "nginx-vm"
-        state: absent
-      ignore_errors: true
+  gather_facts: false
+  vars:
+    cloud_name: "mycloud"
+    lb_name: "prod-lb"
+    web_prefix: "prod-web"
+    web_count: 2
+    db_name: "prod-db"
+    network_name: "production-net"
+    subnet_name: "production-subnet"
+    router_name: "production-router"
+    security_group_web: "prod-web-sg"
+    security_group_db: "prod-db-sg"
+    security_group_lb: "prod-lb-sg"
 
-    - name: Detach subnet from router
-      openstack.cloud.router_interface:
-        router: "nginx-router"
-        subnet: "nginx-subnet"
+  tasks:
+    - name: Delete all VMs (LB, Web, DB)
+      openstack.cloud.server:
+        cloud: "{{ cloud_name }}"
+        name: "{{ item }}"
         state: absent
-      ignore_errors: true
+        wait: yes
+        timeout: 180
+      loop:
+        - "{{ lb_name }}"
+        - "{{ db_name }}"
+      ignore_errors: yes
+
+    - name: Delete web server VMs
+      openstack.cloud.server:
+        cloud: "{{ cloud_name }}"
+        name: "{{ web_prefix }}{{ item }}"
+        state: absent
+        wait: yes
+        timeout: 180
+      loop: "{{ range(1, web_count + 1) | list }}"
+      ignore_errors: yes
+
+    - name: Wait for all VMs to be fully deleted
+      pause:
+        seconds: 15
+
+    - name: Delete all volumes
+      openstack.cloud.volume:
+        cloud: "{{ cloud_name }}"
+        display_name: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ lb_name }}-volume"
+        - "{{ db_name }}-volume"
+      ignore_errors: yes
+
+    - name: Delete web server volumes
+      openstack.cloud.volume:
+        cloud: "{{ cloud_name }}"
+        display_name: "{{ web_prefix }}{{ item }}-volume"
+        state: absent
+      loop: "{{ range(1, web_count + 1) | list }}"
+      ignore_errors: yes
+
+    - name: Detach router from subnet
+      openstack.cloud.router_interface:
+        cloud: "{{ cloud_name }}"
+        router: "{{ router_name }}"
+        subnet: "{{ subnet_name }}"
+        state: absent
+      ignore_errors: yes
 
     - name: Delete router
       openstack.cloud.router:
-        name: "nginx-router"
+        cloud: "{{ cloud_name }}"
+        name: "{{ router_name }}"
         state: absent
-      ignore_errors: true
+      ignore_errors: yes
 
     - name: Delete subnet
       openstack.cloud.subnet:
-        name: "nginx-subnet"
+        cloud: "{{ cloud_name }}"
+        name: "{{ subnet_name }}"
         state: absent
-      ignore_errors: true
+      ignore_errors: yes
 
     - name: Delete network
       openstack.cloud.network:
-        name: "nginx-net"
+        cloud: "{{ cloud_name }}"
+        name: "{{ network_name }}"
         state: absent
-      ignore_errors: true
+      ignore_errors: yes
 
-    - name: Delete security group
+    - name: Delete security groups
       openstack.cloud.security_group:
-        name: "nginx-secgroup"
+        cloud: "{{ cloud_name }}"
+        name: "{{ item }}"
         state: absent
-      ignore_errors: true
+      loop:
+        - "{{ security_group_lb }}"
+        - "{{ security_group_web }}"
+        - "{{ security_group_db }}"
+      ignore_errors: yes
+
+    - name: Display teardown completion
+      debug:
+        msg: |
+          ╔═══════════════════════════════════════════════════════════════╗
+          ║     PRODUCTION STACK TEARDOWN COMPLETED                       ║
+          ╚═══════════════════════════════════════════════════════════════╝
+          
+          Deleted Resources:
+          ├── VMs: {{ lb_name }}, {{ web_count }} web servers, {{ db_name }}
+          ├── Volumes: {{ web_count + 2 }} volumes removed
+          ├── Network: {{ network_name }} and {{ subnet_name }}
+          ├── Router: {{ router_name }}
+          └── Security Groups: LB, Web, DB security groups
+          
+          All scenario 16 resources have been cleaned up successfully.

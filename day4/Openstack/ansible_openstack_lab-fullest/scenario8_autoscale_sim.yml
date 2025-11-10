@@ -3,19 +3,111 @@
   hosts: localhost
   gather_facts: false
   vars:
+    cloud_name: "mycloud"
     image_name: "ubuntu"
     flavor_name: "m1.small"
     network_name: "private"
     keypair_name: "demo-key"
     instance_prefix: "web"
     count: 3
+    security_group_name: "web-scale-sg"
+    volume_size: 8
+
   tasks:
-    - name: Launch multiple web VMs
-      openstack.cloud.server:
-        name: "{{ instance_prefix }}{{ item }}"
-        image: "{{ image_name }}"
-        flavor: "{{ flavor_name }}"
-        network: "{{ network_name }}"
-        key_name: "{{ keypair_name }}"
-        auto_ip: true
-      loop: "{{ range(1, count + 1) | list }}"
+  - name: Ensure network exists
+    openstack.cloud.network:
+      cloud: "{{ cloud_name }}"
+      name: "{{ network_name }}"
+      state: present
+    register: network_result
+
+  - name: Ensure subnet exists for network
+    openstack.cloud.subnet:
+      cloud: "{{ cloud_name }}"
+      name: "{{ network_name }}-subnet"
+      network_name: "{{ network_name }}"
+      cidr: "192.168.100.0/24"
+      ip_version: 4
+      dns_nameservers:
+      - 8.8.8.8
+      - 1.1.1.1
+      enable_dhcp: true
+      state: present
+    when: network_result.changed
+
+  - name: Create security group
+    openstack.cloud.security_group:
+      cloud: "{{ cloud_name }}"
+      name: "{{ security_group_name }}"
+      description: "Security group for web scaling VMs"
+      state: present
+
+  - name: Add SSH rule to security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: tcp
+      port_range_min: 22
+      port_range_max: 22
+      remote_ip_prefix: 0.0.0.0/0
+      state: present
+
+  - name: Add HTTP rule to security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: tcp
+      port_range_min: 80
+      port_range_max: 80
+      remote_ip_prefix: 0.0.0.0/0
+      state: present
+
+  - name: Add ICMP rule to security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: icmp
+      remote_ip_prefix: 0.0.0.0/0
+      state: present
+
+  - name: Create SSH keypair if it doesn't exist
+    openstack.cloud.keypair:
+      cloud: "{{ cloud_name }}"
+      name: "{{ keypair_name }}"
+      public_key_file: "~/.ssh/id_rsa.pub"
+      state: present
+
+  - name: Create volumes for web VMs
+    openstack.cloud.volume:
+      cloud: "{{ cloud_name }}"
+      display_name: "{{ instance_prefix }}{{ item }}-volume"
+      size: "{{ volume_size }}"
+      image: "{{ image_name }}"
+      bootable: true
+      state: present
+    loop: "{{ range(1, count + 1) | list }}"
+
+  - name: Launch multiple web VMs
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "{{ instance_prefix }}{{ item }}"
+      flavor: "{{ flavor_name }}"
+      network: "{{ network_name }}"
+      key_name: "{{ keypair_name }}"
+      security_groups:
+      - "{{ security_group_name }}"
+      boot_volume: "{{ instance_prefix }}{{ item }}-volume"
+      terminate_volume: false
+      auto_ip: true
+      wait: yes
+      timeout: 300
+    loop: "{{ range(1, count + 1) | list }}"
+    register: servers_result
+
+  - name: Display servers information
+    debug:
+      msg: |
+        Created {{ count }} web servers:
+        {% for server in servers_result.results %}
+        - {{ server.server.name }}: {{ server.server.addresses }}
+        {% endfor %}

@@ -2,6 +2,12 @@
 - name: Scenario 9 - Multi-VM with Role (structure example)
   hosts: localhost
   gather_facts: false
+  vars:
+    cloud_name: "mycloud"
+  
   roles:
     - vm_deployment
+
 # Place role in roles/vm_deployment/tasks/main.yml
+# This scenario demonstrates role-based deployment pattern
+# The role should handle VM provisioning with volumes and complete infrastructure

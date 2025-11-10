@@ -2,9 +2,25 @@
 - name: Scenario 13 - Using Vaulted Variables
   hosts: localhost
   gather_facts: false
+  vars:
+    cloud_name: "mycloud"
   vars_files:
-    - secrets/vault.yml
+  - secrets/vault.yml
+
   tasks:
-    - name: Show decrypted secret
-      debug:
-        msg: "Vault password is {{ vault_password }}"
+  - name: Show decrypted secret (demo only)
+    debug:
+      msg: "Vault password is {{ vault_password }}"
+    when: vault_password is defined
+
+  - name: Display vault usage information
+    debug:
+      msg: |
+        This scenario demonstrates Ansible Vault usage with OpenStack.
+        Sensitive data like passwords and API keys should be encrypted.
+
+        To create encrypted vars:
+          ansible-vault create secrets/vault.yml
+
+        To run this playbook:
+          ansible-playbook scenario13_vaulted_vars.yml --ask-vault-pass

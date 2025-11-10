@@ -1,13 +1,38 @@
 ---
 - name: Teardown Scenario 4 - Boot from Volume
   hosts: localhost
-  tasks:
-    - name: Delete VM
-      openstack.cloud.server:
-        name: "vm-from-volume"
-        state: absent
+  gather_facts: false
+  vars:
+    cloud_name: "mycloud"
+    instance_name: "vm-from-volume"
+    volume_name: "boot-volume"
+    security_group_name: "boot-vm-sg"
 
-    - name: Delete volume
-      openstack.cloud.volume:
-        display_name: "boot-volume"
-        state: absent
+  tasks:
+  - name: Delete VM
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "{{ instance_name }}"
+      state: absent
+      wait: yes
+      timeout: 180
+
+  - name: Wait for VM to be fully deleted
+    pause:
+      seconds: 10
+
+  - name: Delete volume
+    openstack.cloud.volume:
+      cloud: "{{ cloud_name }}"
+      display_name: "{{ volume_name }}"
+      state: absent
+
+  - name: Delete security group
+    openstack.cloud.security_group:
+      cloud: "{{ cloud_name }}"
+      name: "{{ security_group_name }}"
+      state: absent
+
+  - name: Display teardown completion
+    debug:
+      msg: "Scenario 4 resources have been cleaned up successfully"

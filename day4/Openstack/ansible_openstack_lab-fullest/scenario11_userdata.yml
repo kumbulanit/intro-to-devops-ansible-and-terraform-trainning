@@ -3,22 +3,120 @@
   hosts: localhost
   gather_facts: false
   vars:
+    cloud_name: "mycloud"
     image_name: "ubuntu"
     flavor_name: "m1.small"
     network_name: "private"
     keypair_name: "demo-key"
     instance_name: "vm-with-userdata"
+    security_group_name: "userdata-vm-sg"
+    volume_name: "userdata-vm-volume"
+    volume_size: 10
     user_data: |
       #!/bin/bash
       apt update
       apt install -y nginx
+      echo "<h1>VM deployed with cloud-init user data</h1>" > /var/www/html/index.html
+      systemctl enable nginx
+      systemctl start nginx
+
   tasks:
-    - name: Launch instance with user_data
-      openstack.cloud.server:
-        name: "{{ instance_name }}"
-        image: "{{ image_name }}"
-        flavor: "{{ flavor_name }}"
-        network: "{{ network_name }}"
-        key_name: "{{ keypair_name }}"
-        user_data: "{{ user_data }}"
-        auto_ip: true
+  - name: Ensure network exists
+    openstack.cloud.network:
+      cloud: "{{ cloud_name }}"
+      name: "{{ network_name }}"
+      state: present
+    register: network_result
+
+  - name: Ensure subnet exists for network
+    openstack.cloud.subnet:
+      cloud: "{{ cloud_name }}"
+      name: "{{ network_name }}-subnet"
+      network_name: "{{ network_name }}"
+      cidr: "192.168.100.0/24"
+      ip_version: 4
+      dns_nameservers:
+      - 8.8.8.8
+      - 1.1.1.1
+      enable_dhcp: true
+      state: present
+    when: network_result.changed
+
+  - name: Create security group
+    openstack.cloud.security_group:
+      cloud: "{{ cloud_name }}"
+      name: "{{ security_group_name }}"
+      description: "Security group for VM with user data"
+      state: present
+
+  - name: Add SSH rule to security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: tcp
+      port_range_min: 22
+      port_range_max: 22
+      remote_ip_prefix: 0.0.0.0/0
+      state: present
+
+  - name: Add HTTP rule to security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: tcp
+      port_range_min: 80
+      port_range_max: 80
+      remote_ip_prefix: 0.0.0.0/0
+      state: present
+
+  - name: Add ICMP rule to security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: icmp
+      remote_ip_prefix: 0.0.0.0/0
+      state: present
+
+  - name: Create SSH keypair if it doesn't exist
+    openstack.cloud.keypair:
+      cloud: "{{ cloud_name }}"
+      name: "{{ keypair_name }}"
+      public_key_file: "~/.ssh/id_rsa.pub"
+      state: present
+
+  - name: Create volume for VM
+    openstack.cloud.volume:
+      cloud: "{{ cloud_name }}"
+      display_name: "{{ volume_name }}"
+      size: "{{ volume_size }}"
+      image: "{{ image_name }}"
+      bootable: true
+      state: present
+    register: volume_result
+
+  - name: Launch instance with user_data
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "{{ instance_name }}"
+      flavor: "{{ flavor_name }}"
+      network: "{{ network_name }}"
+      key_name: "{{ keypair_name }}"
+      security_groups:
+      - "{{ security_group_name }}"
+      boot_volume: "{{ volume_name }}"
+      terminate_volume: false
+      user_data: "{{ user_data }}"
+      auto_ip: true
+      wait: yes
+      timeout: 300
+    register: server_result
+
+  - name: Display VM information
+    debug:
+      msg: |
+        VM created successfully with user data:
+        Name: {{ server_result.server.name }}
+        ID: {{ server_result.server.id }}
+        Status: {{ server_result.server.status }}
+        Networks: {{ server_result.server.addresses }}
+        Note: Nginx will be installed and started via cloud-init

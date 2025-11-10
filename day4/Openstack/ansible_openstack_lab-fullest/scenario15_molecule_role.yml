@@ -2,6 +2,19 @@
 - name: Scenario 15 - Deploy Role with Molecule Test
   hosts: localhost
   gather_facts: false
+  vars:
+    cloud_name: "mycloud"
+
   roles:
-    - test_role
+  - test_role
+
 # Setup Molecule in roles/test_role/molecule/default/molecule.yml
+#
+# This scenario demonstrates:
+# - Role-based playbook structure
+# - Molecule testing framework integration
+# - Best practices for testable infrastructure code
+#
+# To test the role:
+#   cd roles/test_role
+#   molecule test

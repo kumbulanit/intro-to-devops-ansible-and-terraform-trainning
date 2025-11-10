@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars:
+    cloud_name: "mycloud"
     image_name: "ubuntu"
     flavor_name: "m1.small"
     network_name: "private"
@@ -15,12 +16,14 @@
   tasks:
     - name: Ensure network exists
       openstack.cloud.network:
+        cloud: "{{ cloud_name }}"
         name: "{{ network_name }}"
         state: present
       register: network_result
     
     - name: Ensure subnet exists for network
       openstack.cloud.subnet:
+        cloud: "{{ cloud_name }}"
         name: "{{ network_name }}-subnet"
         network_name: "{{ network_name }}"
         cidr: "192.168.100.0/24"
@@ -34,12 +37,14 @@
     
     - name: Create security group
       openstack.cloud.security_group:
+        cloud: "{{ cloud_name }}"
         name: "{{ security_group_name }}"
         description: "Security group for basic VM"
         state: present
     
     - name: Add SSH rule to security group
       openstack.cloud.security_group_rule:
+        cloud: "{{ cloud_name }}"
         security_group: "{{ security_group_name }}"
         protocol: tcp
         port_range_min: 22
@@ -49,6 +54,7 @@
     
     - name: Add ICMP rule to security group
       openstack.cloud.security_group_rule:
+        cloud: "{{ cloud_name }}"
         security_group: "{{ security_group_name }}"
         protocol: icmp
         remote_ip_prefix: 0.0.0.0/0
@@ -56,12 +62,14 @@
     
     - name: Create SSH keypair if it doesn't exist
       openstack.cloud.keypair:
+        cloud: "{{ cloud_name }}"
         name: "{{ keypair_name }}"
         public_key_file: "~/.ssh/id_rsa.pub"
         state: present
     
     - name: Create volume for VM
       openstack.cloud.volume:
+        cloud: "{{ cloud_name }}"
         display_name: "{{ volume_name }}"
         size: "{{ volume_size }}"
         image: "{{ image_name }}"
@@ -71,6 +79,7 @@
     
     - name: Launch a basic VM with volume
       openstack.cloud.server:
+        cloud: "{{ cloud_name }}"
         name: "{{ instance_name }}"
         flavor: "{{ flavor_name }}"
         network: "{{ network_name }}"

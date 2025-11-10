@@ -3,10 +3,33 @@
   hosts: localhost
   gather_facts: false
   vars:
+    cloud_name: "mycloud"
     server_name: "basic-vm"
+    floating_ip_network: "public"
+
   tasks:
-    - name: Allocate floating IP
-      openstack.cloud.floating_ip:
-        network: public
-        server: "{{ server_name }}"
-        reuse: true
+  - name: Check if server exists
+    openstack.cloud.server_info:
+      cloud: "{{ cloud_name }}"
+      server: "{{ server_name }}"
+    register: server_info
+    failed_when: server_info.servers | length == 0
+
+  - name: Allocate floating IP
+    openstack.cloud.floating_ip:
+      cloud: "{{ cloud_name }}"
+      network: "{{ floating_ip_network }}"
+      server: "{{ server_name }}"
+      reuse: true
+      wait: yes
+      timeout: 60
+    register: floating_ip_result
+
+  - name: Display floating IP information
+    debug:
+      msg: |
+        Floating IP assigned successfully:
+        Server: {{ server_name }}
+        Floating IP: {{ floating_ip_result.floating_ip.floating_ip_address }}
+        Fixed IP: {{ floating_ip_result.floating_ip.fixed_ip_address }}
+        Network: {{ floating_ip_network }}

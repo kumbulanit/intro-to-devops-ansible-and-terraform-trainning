@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars:
+    cloud_name: "mycloud"
     network_name: "training-net"
     subnet_name: "training-subnet"
     cidr: "192.168.50.0/24"
@@ -16,6 +17,7 @@
   tasks:
     - name: Create internal network
       openstack.cloud.network:
+        cloud: "{{ cloud_name }}"
         name: "{{ network_name }}"
         state: present
       register: network_result
@@ -30,6 +32,7 @@
     
     - name: Create subnet
       openstack.cloud.subnet:
+        cloud: "{{ cloud_name }}"
         name: "{{ subnet_name }}"
         network_name: "{{ network_name }}"
         cidr: "{{ cidr }}"

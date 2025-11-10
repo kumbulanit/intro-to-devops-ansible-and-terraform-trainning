@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars:
+    cloud_name: "mycloud"
     router_name: "training-router"
     ext_net: "public"
     network_name: "training-net"
@@ -12,12 +13,14 @@
   tasks:
     - name: Ensure training network exists
       openstack.cloud.network:
+        cloud: "{{ cloud_name }}"
         name: "{{ network_name }}"
         state: present
       register: network_result
     
     - name: Ensure training subnet exists
       openstack.cloud.subnet:
+        cloud: "{{ cloud_name }}"
         name: "{{ subnet_name }}"
         network_name: "{{ network_name }}"
         cidr: "{{ subnet_cidr }}"
@@ -32,6 +35,7 @@
     
     - name: Create router
       openstack.cloud.router:
+        cloud: "{{ cloud_name }}"
         name: "{{ router_name }}"
         network: "{{ ext_net }}"
         state: present
@@ -39,6 +43,7 @@
     
     - name: Attach router to subnet
       openstack.cloud.router_interface:
+        cloud: "{{ cloud_name }}"
         router: "{{ router_name }}"
         subnet: "{{ subnet_name }}"
         state: present

@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars:
+    cloud_name: "mycloud"
     image_name: "ubuntu"
     flavor_name: "m1.small"
     network_name: "lamp-network"
@@ -12,138 +13,150 @@
     web_volume: "lamp-web-volume"
     db_volume: "lamp-db-volume"
     volume_size: 15
-  
+
   tasks:
-    - name: Create LAMP network
-      openstack.cloud.network:
-        name: "{{ network_name }}"
-        state: present
-      register: network_result
-    
-    - name: Create LAMP subnet
-      openstack.cloud.subnet:
-        name: "{{ subnet_name }}"
-        network_name: "{{ network_name }}"
-        cidr: "192.168.30.0/24"
-        gateway_ip: "192.168.30.1"
-        ip_version: 4
-        dns_nameservers:
-          - 8.8.8.8
-          - 1.1.1.1
-        enable_dhcp: true
-        state: present
-    
-    - name: Create LAMP security group
-      openstack.cloud.security_group:
-        name: "{{ security_group_name }}"
-        description: "Security group for LAMP stack"
-        state: present
-    
-    - name: Add SSH rule
-      openstack.cloud.security_group_rule:
-        security_group: "{{ security_group_name }}"
-        protocol: tcp
-        port_range_min: 22
-        port_range_max: 22
-        remote_ip_prefix: 0.0.0.0/0
-    
-    - name: Add HTTP rule
-      openstack.cloud.security_group_rule:
-        security_group: "{{ security_group_name }}"
-        protocol: tcp
-        port_range_min: 80
-        port_range_max: 80
-        remote_ip_prefix: 0.0.0.0/0
-    
-    - name: Add HTTPS rule
-      openstack.cloud.security_group_rule:
-        security_group: "{{ security_group_name }}"
-        protocol: tcp
-        port_range_min: 443
-        port_range_max: 443
-        remote_ip_prefix: 0.0.0.0/0
-    
-    - name: Add MySQL rule (internal)
-      openstack.cloud.security_group_rule:
-        security_group: "{{ security_group_name }}"
-        protocol: tcp
-        port_range_min: 3306
-        port_range_max: 3306
-        remote_ip_prefix: 192.168.30.0/24
-    
-    - name: Add ICMP rule
-      openstack.cloud.security_group_rule:
-        security_group: "{{ security_group_name }}"
-        protocol: icmp
-        remote_ip_prefix: 0.0.0.0/0
-    
-    - name: Create SSH keypair
-      openstack.cloud.keypair:
-        name: "{{ keypair_name }}"
-        public_key_file: "~/.ssh/id_rsa.pub"
-        state: present
-    
-    - name: Create volumes for LAMP stack
-      openstack.cloud.volume:
-        display_name: "{{ item }}"
-        size: "{{ volume_size }}"
-        image: "{{ image_name }}"
-        bootable: true
-        state: present
-      loop:
-        - "{{ web_volume }}"
-        - "{{ db_volume }}"
-    
-    - name: Deploy Apache + PHP VM (Web Server)
-      openstack.cloud.server:
-        name: "lamp-web"
-        flavor: "{{ flavor_name }}"
-        boot_volume: "{{ web_volume }}"
-        terminate_volume: false
-        network: "{{ network_name }}"
-        key_name: "{{ keypair_name }}"
-        security_groups:
-          - "{{ security_group_name }}"
-        auto_ip: true
-        wait: yes
-        timeout: 300
-        meta:
-          role: "webserver"
-          stack: "lamp"
-      register: web_server
-    
-    - name: Deploy MySQL VM (Database Server)
-      openstack.cloud.server:
-        name: "lamp-db"
-        flavor: "{{ flavor_name }}"
-        boot_volume: "{{ db_volume }}"
-        terminate_volume: false
-        network: "{{ network_name }}"
-        key_name: "{{ keypair_name }}"
-        security_groups:
-          - "{{ security_group_name }}"
-        auto_ip: true
-        wait: yes
-        timeout: 300
-        meta:
-          role: "database"
-          stack: "lamp"
-      register: db_server
-    
-    - name: Display LAMP stack information
-      debug:
-        msg: |
-          LAMP Stack deployed successfully:
-          
-          Web Server:
-            Name: {{ web_server.server.name }}
-            IP: {{ web_server.server.addresses }}
-            Role: Apache + PHP
-          
-          Database Server:
-            Name: {{ db_server.server.name }}
-            IP: {{ db_server.server.addresses }}
-            Role: MySQL
-          
-          Network: {{ network_name }}
-          Security Group: {{ security_group_name }}
+  - name: Create LAMP network
+    openstack.cloud.network:
+      cloud: "{{ cloud_name }}"
+      name: "{{ network_name }}"
+      state: present
+    register: network_result
+
+  - name: Create LAMP subnet
+    openstack.cloud.subnet:
+      cloud: "{{ cloud_name }}"
+      name: "{{ subnet_name }}"
+      network_name: "{{ network_name }}"
+      cidr: "192.168.30.0/24"
+      gateway_ip: "192.168.30.1"
+      ip_version: 4
+      dns_nameservers:
+      - 8.8.8.8
+      - 1.1.1.1
+      enable_dhcp: true
+      state: present
+
+  - name: Create LAMP security group
+    openstack.cloud.security_group:
+      cloud: "{{ cloud_name }}"
+      name: "{{ security_group_name }}"
+      description: "Security group for LAMP stack"
+      state: present
+
+  - name: Add SSH rule
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: tcp
+      port_range_min: 22
+      port_range_max: 22
+      remote_ip_prefix: 0.0.0.0/0
+
+  - name: Add HTTP rule
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: tcp
+      port_range_min: 80
+      port_range_max: 80
+      remote_ip_prefix: 0.0.0.0/0
+
+  - name: Add HTTPS rule
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: tcp
+      port_range_min: 443
+      port_range_max: 443
+      remote_ip_prefix: 0.0.0.0/0
+
+  - name: Add MySQL rule (internal)
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: tcp
+      port_range_min: 3306
+      port_range_max: 3306
+      remote_ip_prefix: 192.168.30.0/24
+
+  - name: Add ICMP rule
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_name }}"
+      protocol: icmp
+      remote_ip_prefix: 0.0.0.0/0
+
+  - name: Create SSH keypair
+    openstack.cloud.keypair:
+      cloud: "{{ cloud_name }}"
+      name: "{{ keypair_name }}"
+      public_key_file: "~/.ssh/id_rsa.pub"
+      state: present
+
+  - name: Create volumes for LAMP stack
+    openstack.cloud.volume:
+      cloud: "{{ cloud_name }}"
+      display_name: "{{ item }}"
+      size: "{{ volume_size }}"
+      image: "{{ image_name }}"
+      bootable: true
+      state: present
+    loop:
+    - "{{ web_volume }}"
+    - "{{ db_volume }}"
+
+  - name: Deploy Apache + PHP VM (Web Server)
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "lamp-web"
+      flavor: "{{ flavor_name }}"
+      boot_volume: "{{ web_volume }}"
+      terminate_volume: false
+      network: "{{ network_name }}"
+      key_name: "{{ keypair_name }}"
+      security_groups:
+      - "{{ security_group_name }}"
+      auto_ip: true
+      wait: yes
+      timeout: 300
+      meta:
+        role: "webserver"
+        stack: "lamp"
+    register: web_server
+
+  - name: Deploy MySQL VM (Database Server)
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "lamp-db"
+      flavor: "{{ flavor_name }}"
+      boot_volume: "{{ db_volume }}"
+      terminate_volume: false
+      network: "{{ network_name }}"
+      key_name: "{{ keypair_name }}"
+      security_groups:
+      - "{{ security_group_name }}"
+      auto_ip: true
+      wait: yes
+      timeout: 300
+      meta:
+        role: "database"
+        stack: "lamp"
+    register: db_server
+
+  - name: Display LAMP stack information
+    debug:
+      msg: |
+        LAMP Stack deployed successfully:
+
+        Web Server:
+          Name: {{ web_server.server.name }}
+          IP: {{ web_server.server.addresses }}
+          Role: Apache + PHP
+
+        Database Server:
+          Name: {{ db_server.server.name }}
+          IP: {{ db_server.server.addresses }}
+          Role: MySQL
+
+        Network: {{ network_name }}
+        Security Group: {{ security_group_name }}

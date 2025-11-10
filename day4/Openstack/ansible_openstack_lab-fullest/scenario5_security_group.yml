@@ -3,59 +3,65 @@
   hosts: localhost
   gather_facts: false
   vars:
+    cloud_name: "mycloud"
     secgroup_name: "web-secgroup"
-  
+
   tasks:
-    - name: Create security group
-      openstack.cloud.security_group:
-        name: "{{ secgroup_name }}"
-        description: "Allow SSH, HTTP, HTTPS and ICMP"
-        state: present
-      register: secgroup_result
-    
-    - name: Add SSH rule
-      openstack.cloud.security_group_rule:
-        security_group: "{{ secgroup_name }}"
-        protocol: tcp
-        port_range_min: 22
-        port_range_max: 22
-        remote_ip_prefix: 0.0.0.0/0
-        direction: ingress
-        state: present
-    
-    - name: Add HTTP rule
-      openstack.cloud.security_group_rule:
-        security_group: "{{ secgroup_name }}"
-        protocol: tcp
-        port_range_min: 80
-        port_range_max: 80
-        remote_ip_prefix: 0.0.0.0/0
-        direction: ingress
-        state: present
-    
-    - name: Add HTTPS rule
-      openstack.cloud.security_group_rule:
-        security_group: "{{ secgroup_name }}"
-        protocol: tcp
-        port_range_min: 443
-        port_range_max: 443
-        remote_ip_prefix: 0.0.0.0/0
-        direction: ingress
-        state: present
-    
-    - name: Add ICMP rule (ping)
-      openstack.cloud.security_group_rule:
-        security_group: "{{ secgroup_name }}"
-        protocol: icmp
-        remote_ip_prefix: 0.0.0.0/0
-        direction: ingress
-        state: present
-    
-    - name: Display security group information
-      debug:
-        msg: |
-          Security Group '{{ secgroup_name }}' created successfully with rules:
-          - SSH (port 22) from anywhere
-          - HTTP (port 80) from anywhere
-          - HTTPS (port 443) from anywhere
-          - ICMP (ping) from anywhere
+  - name: Create security group
+    openstack.cloud.security_group:
+      cloud: "{{ cloud_name }}"
+      name: "{{ secgroup_name }}"
+      description: "Allow SSH, HTTP, HTTPS and ICMP"
+      state: present
+    register: secgroup_result
+
+  - name: Add SSH rule
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ secgroup_name }}"
+      protocol: tcp
+      port_range_min: 22
+      port_range_max: 22
+      remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+      state: present
+
+  - name: Add HTTP rule
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ secgroup_name }}"
+      protocol: tcp
+      port_range_min: 80
+      port_range_max: 80
+      remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+      state: present
+
+  - name: Add HTTPS rule
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ secgroup_name }}"
+      protocol: tcp
+      port_range_min: 443
+      port_range_max: 443
+      remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+      state: present
+
+  - name: Add ICMP rule (ping)
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ secgroup_name }}"
+      protocol: icmp
+      remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+      state: present
+
+  - name: Display security group information
+    debug:
+      msg: |
+        Security Group '{{ secgroup_name }}' created successfully with rules:
+        - SSH (port 22) from anywhere
+        - HTTP (port 80) from anywhere
+        - HTTPS (port 443) from anywhere
+        - ICMP (ping) from anywhere
