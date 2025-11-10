@@ -1,138 +1,109 @@
 ---
-- name: Scenario 16 - Full Production-Ready Stack
+- name: OpenStack Fullstack Infrastructure Deployment
   hosts: localhost
   gather_facts: false
   vars:
     cloud_name: "mycloud"
     image_name: "ubuntu-24.04"
     flavor_name: "m1.small"
-    network_name: "production-net"
-    subnet_name: "production-subnet"
-    router_name: "production-router"
-    keypair_name: "demo-key"
-    security_group_web: "prod-web-sg"
-    security_group_db: "prod-db-sg"
-    security_group_lb: "prod-lb-sg"
-    lb_name: "prod-lb"
-    web_prefix: "prod-web"
+
+    network_name: "fullstack-net"
+    subnet_name: "fullstack-subnet"
+    subnet_cidr: "192.168.210.0/24"
+    router_name: "fullstack-router"
+    external_network: "public"
+
+    keypair_name: "fullstack-key"
+    keypair_public_key: "~/.ssh/id_rsa.pub"
+
+    security_group_lb: "fullstack-lb-sg"
+    security_group_web: "fullstack-web-sg"
+    security_group_db: "fullstack-db-sg"
+
+    lb_name: "fullstack-lb"
+    lb_volume_size: 10
+
+    web_prefix: "fullstack-web"
     web_count: 2
-    db_name: "prod-db"
-    volume_size_web: 15
-    volume_size_db: 30
-    volume_size_lb: 10
+    web_volume_size: 15
+
+    db_name: "fullstack-db"
+    db_volume_size: 30
 
   tasks:
-  # Network Infrastructure
-  - name: Create production network
+  - name: Ensure application network exists
     openstack.cloud.network:
       cloud: "{{ cloud_name }}"
       name: "{{ network_name }}"
       state: present
     register: network_result
 
-  - name: Create production subnet
+  - name: Ensure application subnet exists
     openstack.cloud.subnet:
       cloud: "{{ cloud_name }}"
       name: "{{ subnet_name }}"
       network_name: "{{ network_name }}"
-      cidr: "192.168.200.0/24"
-      gateway_ip: "192.168.200.1"
+      cidr: "{{ subnet_cidr }}"
       ip_version: 4
+      enable_dhcp: true
       dns_nameservers:
       - 8.8.8.8
       - 1.1.1.1
-      enable_dhcp: true
       state: present
 
-  - name: Create production router
+  - name: Ensure router exists
     openstack.cloud.router:
       cloud: "{{ cloud_name }}"
       name: "{{ router_name }}"
-      network: "public"
+      network: "{{ external_network }}"
       interfaces:
       - subnet: "{{ subnet_name }}"
       state: present
     register: router_result
 
-  # Security Groups
-  - name: Create load balancer security group
+  - name: Ensure security groups exist
     openstack.cloud.security_group:
       cloud: "{{ cloud_name }}"
-      name: "{{ security_group_lb }}"
-      description: "Security group for load balancer"
+      name: "{{ item.name }}"
+      description: "{{ item.description }}"
       state: present
+    loop:
+    - { name: "{{ security_group_lb }}", description: "Load balancer security group" }
+    - { name: "{{ security_group_web }}", description: "Web tier security group" }
+    - { name: "{{ security_group_db }}", description: "Database security group" }
 
-  - name: Add rules to LB security group
+  - name: Configure security group rules
     openstack.cloud.security_group_rule:
       cloud: "{{ cloud_name }}"
-      security_group: "{{ security_group_lb }}"
+      security_group: "{{ item.security_group }}"
       protocol: "{{ item.protocol }}"
       port_range_min: "{{ item.port_min }}"
       port_range_max: "{{ item.port_max }}"
       remote_ip_prefix: "{{ item.cidr }}"
+      direction: ingress
       state: present
     loop:
-    - { protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
-    - { protocol: tcp, port_min: 80, port_max: 80, cidr: "0.0.0.0/0" }
-    - { protocol: tcp, port_min: 443, port_max: 443, cidr: "0.0.0.0/0" }
-    - { protocol: icmp, port_min: -1, port_max: -1, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_lb }}", protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_lb }}", protocol: tcp, port_min: 80, port_max: 80, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_lb }}", protocol: tcp, port_min: 443, port_max: 443, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_lb }}", protocol: icmp, port_min: -1, port_max: -1, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_web }}", protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_web }}", protocol: tcp, port_min: 80, port_max: 80, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_web }}", protocol: tcp, port_min: 443, port_max: 443, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_web }}", protocol: icmp, port_min: -1, port_max: -1, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_db }}", protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
+    - { security_group: "{{ security_group_db }}", protocol: tcp, port_min: 3306, port_max: 3306, cidr: "{{ subnet_cidr }}" }
+    - { security_group: "{{ security_group_db }}", protocol: icmp, port_min: -1, port_max: -1, cidr: "0.0.0.0/0" }
     ignore_errors: yes
 
-  - name: Create web servers security group
-    openstack.cloud.security_group:
-      cloud: "{{ cloud_name }}"
-      name: "{{ security_group_web }}"
-      description: "Security group for web servers"
-      state: present
-
-  - name: Add rules to web security group
-    openstack.cloud.security_group_rule:
-      cloud: "{{ cloud_name }}"
-      security_group: "{{ security_group_web }}"
-      protocol: "{{ item.protocol }}"
-      port_range_min: "{{ item.port_min }}"
-      port_range_max: "{{ item.port_max }}"
-      remote_ip_prefix: "{{ item.cidr }}"
-      state: present
-    loop:
-    - { protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
-    - { protocol: tcp, port_min: 80, port_max: 80, cidr: "192.168.200.0/24" }
-    - { protocol: tcp, port_min: 443, port_max: 443, cidr: "192.168.200.0/24" }
-    - { protocol: icmp, port_min: -1, port_max: -1, cidr: "0.0.0.0/0" }
-    ignore_errors: yes
-
-  - name: Create database security group
-    openstack.cloud.security_group:
-      cloud: "{{ cloud_name }}"
-      name: "{{ security_group_db }}"
-      description: "Security group for database server"
-      state: present
-
-  - name: Add rules to DB security group
-    openstack.cloud.security_group_rule:
-      cloud: "{{ cloud_name }}"
-      security_group: "{{ security_group_db }}"
-      protocol: "{{ item.protocol }}"
-      port_range_min: "{{ item.port_min }}"
-      port_range_max: "{{ item.port_max }}"
-      remote_ip_prefix: "{{ item.cidr }}"
-      state: present
-    loop:
-    - { protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
-    - { protocol: tcp, port_min: 3306, port_max: 3306, cidr: "192.168.200.0/24" }
-    - { protocol: icmp, port_min: -1, port_max: -1, cidr: "0.0.0.0/0" }
-    ignore_errors: yes
-
-  # SSH Keypair
-  - name: Create SSH keypair
+  - name: Ensure SSH key pair exists
     openstack.cloud.keypair:
       cloud: "{{ cloud_name }}"
       name: "{{ keypair_name }}"
-      public_key_file: "~/.ssh/id_rsa.pub"
+      public_key_file: "{{ keypair_public_key }}"
       state: present
 
-  # Volumes for all VMs
-  - name: Provision volumes for web tier
+  - name: Provision web tier volumes
     vars:
       current_web_name: "{{ web_prefix }}{{ web_index }}"
       current_web_volume: "{{ web_prefix }}{{ web_index }}-volume"
@@ -141,7 +112,7 @@
       openstack.cloud.volume:
         cloud: "{{ cloud_name }}"
         name: "{{ current_web_volume }}"
-        size: "{{ volume_size_web }}"
+        size: "{{ web_volume_size }}"
         image: "{{ image_name }}"
         bootable: true
         state: present
@@ -151,7 +122,7 @@
       set_fact:
         current_web_volume_id: "{{ web_volume_create.volume.id | default(web_volume_create.id) }}"
 
-    - name: Wait for {{ current_web_volume }} readiness
+    - name: Wait for {{ current_web_volume }} to become ready
       openstack.cloud.volume_info:
         cloud: "{{ cloud_name }}"
         filters:
@@ -168,7 +139,7 @@
           and ((web_volume_status.volumes[0].status | default('error')) == 'error')
         )
 
-    - name: Ensure {{ current_web_volume }} stays bootable
+    - name: Ensure {{ current_web_volume }} is bootable
       command: "openstack volume set --bootable {{ current_web_volume_id }}"
       environment:
         OS_CLOUD: "{{ cloud_name }}"
@@ -181,16 +152,18 @@
              if (web_volume_status.volumes is defined and web_volume_status.volumes | length > 0)
              else (web_volume_create.volume if (web_volume_create.volume is defined) else web_volume_create) }}
 
-    - name: Append {{ current_web_volume }} metadata
+    - name: Compose {{ current_web_volume }} metadata
       set_fact:
-        web_volume_records: "{{ (web_volume_records | default([])) + [ web_volume_payload ] }}"
-      vars:
-        web_volume_payload:
+        current_web_volume_record:
           server_name: "{{ current_web_name }}"
           volume_name: "{{ current_web_volume }}"
           volume_id: "{{ current_web_volume_details.id }}"
           status: "{{ current_web_volume_details.status }}"
           bootable: "{{ current_web_volume_details.is_bootable }}"
+
+    - name: Append {{ current_web_volume }} metadata
+      set_fact:
+        web_volume_records: "{{ (web_volume_records | default([])) + [ current_web_volume_record ] }}"
     loop: "{{ range(1, web_count + 1) | list }}"
     loop_control:
       loop_var: web_index
@@ -201,7 +174,7 @@
       openstack.cloud.volume:
         cloud: "{{ cloud_name }}"
         name: "{{ db_name }}-volume"
-        size: "{{ volume_size_db }}"
+        size: "{{ db_volume_size }}"
         image: "{{ image_name }}"
         bootable: true
         state: present
@@ -211,7 +184,7 @@
       set_fact:
         db_volume_id: "{{ db_volume_create.volume.id | default(db_volume_create.id) }}"
 
-    - name: Wait for {{ db_name }} volume readiness
+    - name: Wait for {{ db_name }} volume to become ready
       openstack.cloud.volume_info:
         cloud: "{{ cloud_name }}"
         filters:
@@ -228,7 +201,7 @@
           and ((db_volume_status.volumes[0].status | default('error')) == 'error')
         )
 
-    - name: Keep {{ db_name }} volume bootable
+    - name: Ensure {{ db_name }} volume is bootable
       command: "openstack volume set --bootable {{ db_volume_id }}"
       environment:
         OS_CLOUD: "{{ cloud_name }}"
@@ -247,7 +220,7 @@
       openstack.cloud.volume:
         cloud: "{{ cloud_name }}"
         name: "{{ lb_name }}-volume"
-        size: "{{ volume_size_lb }}"
+        size: "{{ lb_volume_size }}"
         image: "{{ image_name }}"
         bootable: true
         state: present
@@ -257,7 +230,7 @@
       set_fact:
         lb_volume_id: "{{ lb_volume_create.volume.id | default(lb_volume_create.id) }}"
 
-    - name: Wait for {{ lb_name }} volume readiness
+    - name: Wait for {{ lb_name }} volume to become ready
       openstack.cloud.volume_info:
         cloud: "{{ cloud_name }}"
         filters:
@@ -274,7 +247,7 @@
           and ((lb_volume_status.volumes[0].status | default('error')) == 'error')
         )
 
-    - name: Keep {{ lb_name }} volume bootable
+    - name: Ensure {{ lb_name }} volume is bootable
       command: "openstack volume set --bootable {{ lb_volume_id }}"
       environment:
         OS_CLOUD: "{{ cloud_name }}"
@@ -287,8 +260,27 @@
              if (lb_volume_status.volumes is defined and lb_volume_status.volumes | length > 0)
              else (lb_volume_create.volume if (lb_volume_create.volume is defined) else lb_volume_create) }}
 
-  # Deploy VMs
-  - name: Deploy database server
+  - name: Launch web application servers
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "{{ item.server_name }}"
+      flavor: "{{ flavor_name }}"
+      network: "{{ network_name }}"
+      key_name: "{{ keypair_name }}"
+      security_groups:
+      - "{{ security_group_web }}"
+      boot_volume: "{{ item.volume_id }}"
+      terminate_volume: false
+      auto_ip: false
+      wait: yes
+      timeout: 600
+      meta:
+        role: "web"
+        tier: "application"
+    loop: "{{ web_volume_records | default([]) }}"
+    register: web_servers
+
+  - name: Launch database server
     openstack.cloud.server:
       cloud: "{{ cloud_name }}"
       name: "{{ db_name }}"
@@ -305,31 +297,9 @@
       meta:
         role: "database"
         tier: "backend"
-        environment: "production"
     register: db_server
 
-  - name: Deploy web servers
-    openstack.cloud.server:
-      cloud: "{{ cloud_name }}"
-      name: "{{ item.server_name }}"
-      flavor: "{{ flavor_name }}"
-      network: "{{ network_name }}"
-      key_name: "{{ keypair_name }}"
-      security_groups:
-      - "{{ security_group_web }}"
-      boot_volume: "{{ item.volume_id }}"
-      terminate_volume: false
-      auto_ip: false
-      wait: yes
-      timeout: 600
-      meta:
-        role: "webserver"
-        tier: "application"
-        environment: "production"
-    loop: "{{ web_volume_records | default([]) }}"
-    register: web_servers
-
-  - name: Deploy load balancer
+  - name: Launch load balancer server
     openstack.cloud.server:
       cloud: "{{ cloud_name }}"
       name: "{{ lb_name }}"
@@ -346,62 +316,43 @@
       meta:
         role: "loadbalancer"
         tier: "frontend"
-        environment: "production"
     register: lb_server
 
-  - name: Build web server summary list
-    set_fact:
-      web_server_summary_list: "{{ (web_server_summary_list | default([])) + [ web_summary_item ] }}"
-    loop: "{{ web_servers.results | default([]) }}"
-    when: web_servers is defined
-    vars:
-      web_summary_item:
-        name: "{{ item.server.name }}"
-        addresses: "{{ item.server.addresses }}"
-        security_group: "{{ security_group_web }}"
-        volume_id: "{{ (web_volume_records | selectattr('server_name', 'equalto', item.server.name) | map(attribute='volume_id') | list | first) }}"
-
-  - name: Compose full stack deployment summary
-    set_fact:
-      fullstack_summary:
-        network:
-          name: "{{ network_name }}"
-          subnet: "{{ subnet_name }}"
-          router: "{{ router_name }}"
-        load_balancer:
-          name: "{{ lb_server.server.name }}"
-          addresses: "{{ lb_server.server.addresses }}"
-          security_group: "{{ security_group_lb }}"
-          volume_id: "{{ lb_volume_details.id }}"
-          volume_size_gb: "{{ lb_volume_details.size }}"
-        web_servers: "{{ web_server_summary_list | default([]) }}"
-        database:
-          name: "{{ db_server.server.name }}"
-          addresses: "{{ db_server.server.addresses }}"
-          security_group: "{{ security_group_db }}"
-          volume_id: "{{ db_volume_details.id }}"
-          volume_size_gb: "{{ db_volume_details.size }}"
-        security_groups:
-        - name: "{{ security_group_lb }}"
-          notes: "Public access on ports 80/443 and SSH"
-        - name: "{{ security_group_web }}"
-          notes: "Ingress from load balancer and SSH"
-        - name: "{{ security_group_db }}"
-          notes: "MySQL from web tier and SSH"
-        volumes:
-          load_balancer:
-            id: "{{ lb_volume_details.id }}"
-            size_gb: "{{ lb_volume_details.size }}"
-          web: "{{ web_volume_records | default([]) }}"
-          database:
-            id: "{{ db_volume_details.id }}"
-            size_gb: "{{ db_volume_details.size }}"
-        next_steps:
-        - "Access the load balancer and configure HAProxy"
-        - "Deploy application code on web nodes"
-        - "Configure MySQL backups on the database server"
-        - "Test traffic via the load balancer public IP"
-
-  - name: Display full stack deployment information
+  - name: Display deployment summary
     debug:
-      var: fullstack_summary
+      msg: |
+        ╔═══════════════════════════════════════════════════════════════╗
+        ║                 OpenStack Fullstack Deployment                ║
+        ╚═══════════════════════════════════════════════════════════════╝
+
+        Networking:
+          - Network: {{ network_name }}
+          - Subnet: {{ subnet_name }} ({{ subnet_cidr }})
+          - Router: {{ router_name }} (uplink: {{ external_network }})
+
+        Load Balancer:
+          - Name: {{ lb_server.server.name }}
+          - IPs: {{ lb_server.server.addresses }}
+          - Volume: {{ lb_volume_details.id }} ({{ lb_volume_details.size }} GB)
+
+        Web Tier ({{ web_volume_records | length }} servers):
+        {% for web in (web_servers.results | default([])) %}
+          {% set vol_id = (web_volume_records | default([]) | selectattr('server_name', 'equalto', web.server.name) | map(attribute='volume_id') | list | first) %}
+          - {{ web.server.name }} :: {{ web.server.addresses }} :: Volume {{ vol_id | default('n/a') }}
+        {% endfor %}
+
+        Database:
+          - Name: {{ db_server.server.name }}
+          - IPs: {{ db_server.server.addresses }}
+          - Volume: {{ db_volume_details.id }} ({{ db_volume_details.size }} GB)
+
+        Security Groups:
+          - {{ security_group_lb }} (22, 80, 443, ICMP from 0.0.0.0/0)
+          - {{ security_group_web }} (22, 80, 443, ICMP from 0.0.0.0/0)
+          - {{ security_group_db }} (22 from 0.0.0.0/0, 3306 from {{ subnet_cidr }})
+
+        Next steps:
+          1. SSH to {{ lb_server.server.name }} using key {{ keypair_name }} and configure reverse proxy.
+          2. Deploy application code on web tier nodes.
+          3. Configure database replication/backups as required.
+          4. Update DNS records to point to the load balancer public IP.
