@@ -1,0 +1,27 @@
+# Python Requirements for OpenStack Ansible Modules
+# Install with: pip install -r requirements.txt
+
+# Core OpenStack SDK
+openstacksdk>=1.0.0
+
+# Python OpenStack Client (for CLI operations)
+python-openstackclient>=6.2.0
+
+# Individual OpenStack service clients
+python-novaclient>=18.3.0        # Compute (Nova)
+python-neutronclient>=9.0.0      # Networking (Neutron)
+python-cinderclient>=9.3.0       # Block Storage (Cinder)
+python-glanceclient>=4.3.0       # Image (Glance)
+python-keystoneclient>=5.1.0     # Identity (Keystone)
+
+# Additional dependencies
+PyYAML>=6.0
+jmespath>=1.0.1
+netaddr>=0.9.0
+
+# Ansible itself (if not already installed)
+ansible>=2.9,<10.0
+
+# Optional but recommended
+python-heatclient>=3.5.0         # Orchestration (Heat)
+python-swiftclient>=4.3.0        # Object Storage (Swift)

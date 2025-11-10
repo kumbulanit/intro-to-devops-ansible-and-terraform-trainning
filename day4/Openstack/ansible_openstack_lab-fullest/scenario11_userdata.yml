@@ -58,6 +58,7 @@
       port_range_max: 22
       remote_ip_prefix: 0.0.0.0/0
       state: present
+    ignore_errors: yes
 
   - name: Add HTTP rule to security group
     openstack.cloud.security_group_rule:
@@ -68,6 +69,7 @@
       port_range_max: 80
       remote_ip_prefix: 0.0.0.0/0
       state: present
+    ignore_errors: yes
 
   - name: Add ICMP rule to security group
     openstack.cloud.security_group_rule:
@@ -76,6 +78,7 @@
       protocol: icmp
       remote_ip_prefix: 0.0.0.0/0
       state: present
+    ignore_errors: yes
 
   - name: Create SSH keypair if it doesn't exist
     openstack.cloud.keypair:
@@ -108,7 +111,7 @@
       user_data: "{{ user_data }}"
       auto_ip: true
       wait: yes
-      timeout: 300
+      timeout: 600
     register: server_result
 
   - name: Display VM information

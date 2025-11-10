@@ -1,0 +1,188 @@
+---
+# Test OpenStack Connection and Modules
+# This playbook verifies that all OpenStack modules are working correctly
+
+- name: Test OpenStack Setup
+  hosts: localhost
+  gather_facts: no
+  vars:
+    cloud_name: mycloud
+
+  tasks:
+  - name: Display test information
+    debug:
+      msg: |
+        ╔════════════════════════════════════════════════════════╗
+        ║     OpenStack Ansible Module Test Suite               ║
+        ╠════════════════════════════════════════════════════════╣
+        ║  This playbook tests all OpenStack modules needed     ║
+        ║  for the lab scenarios.                               ║
+        ╚════════════════════════════════════════════════════════╝
+
+  #
+  # Test 1: Identity/Authentication
+  #
+  - name: "Test 1: Verify OpenStack authentication"
+    openstack.cloud.auth:
+      cloud: "{{ cloud_name }}"
+    register: auth_test
+    ignore_errors: yes
+
+  - name: Display auth result
+    debug:
+      msg: "{{ 'SUCCESS' if auth_test is succeeded else 'FAILED - Check clouds.yaml credentials' }}"
+
+  #
+  # Test 2: Image Service (Glance)
+  #
+  - name: "Test 2: List available images"
+    openstack.cloud.image_info:
+      cloud: "{{ cloud_name }}"
+    register: images
+    ignore_errors: yes
+
+  - name: Display images found
+    debug:
+      msg: "Found {{ images.images | length }} images"
+    when: images is succeeded
+
+  - name: Show sample images
+    debug:
+      msg: "Image: {{ item.name }} ({{ item.id }})"
+    loop: "{{ images.images[:3] | default([]) }}"
+    when: images is succeeded
+
+  #
+  # Test 3: Network Service (Neutron)
+  #
+  - name: "Test 3: List networks"
+    openstack.cloud.networks_info:
+      cloud: "{{ cloud_name }}"
+    register: networks
+    ignore_errors: yes
+
+  - name: Display networks found
+    debug:
+      msg: "Found {{ networks.networks | length }} networks"
+    when: networks is succeeded
+
+  #
+  # Test 4: Compute Service (Nova)
+  #
+  - name: "Test 4: List flavors"
+    openstack.cloud.compute_flavor_info:
+      cloud: "{{ cloud_name }}"
+    register: flavors
+    ignore_errors: yes
+
+  - name: Display flavors found
+    debug:
+      msg: "Found {{ flavors.flavors | length }} flavors"
+    when: flavors is succeeded
+
+  - name: Show sample flavors
+    debug:
+      msg: "Flavor: {{ item.name }} (RAM: {{ item.ram }}MB, vCPUs: {{ item.vcpus }})"
+    loop: "{{ flavors.flavors[:3] | default([]) }}"
+    when: flavors is succeeded
+
+  #
+  # Test 5: Volume Service (Cinder)
+  #
+  - name: "Test 5: List volume types"
+    openstack.cloud.volume_type_info:
+      cloud: "{{ cloud_name }}"
+    register: volume_types
+    ignore_errors: yes
+
+  - name: Display volume types
+    debug:
+      msg: "Found {{ volume_types.volume_types | length }} volume types"
+    when: volume_types is succeeded
+
+  #
+  # Test 6: Security Groups
+  #
+  - name: "Test 6: List security groups"
+    openstack.cloud.security_group_info:
+      cloud: "{{ cloud_name }}"
+    register: security_groups
+    ignore_errors: yes
+
+  - name: Display security groups
+    debug:
+      msg: "Found {{ security_groups.security_groups | length }} security groups"
+    when: security_groups is succeeded
+
+  #
+  # Test 7: Keypairs
+  #
+  - name: "Test 7: List keypairs"
+    openstack.cloud.keypair_info:
+      cloud: "{{ cloud_name }}"
+    register: keypairs
+    ignore_errors: yes
+
+  - name: Display keypairs
+    debug:
+      msg: "Found {{ keypairs.keypairs | length }} keypairs"
+    when: keypairs is succeeded
+
+  #
+  # Summary
+  #
+  - name: Generate test summary
+    set_fact:
+      test_results:
+        authentication: "{{ 'PASS' if auth_test is succeeded else 'FAIL' }}"
+        images: "{{ 'PASS' if images is succeeded else 'FAIL' }}"
+        networks: "{{ 'PASS' if networks is succeeded else 'FAIL' }}"
+        flavors: "{{ 'PASS' if flavors is succeeded else 'FAIL' }}"
+        volumes: "{{ 'PASS' if volume_types is succeeded else 'FAIL' }}"
+        security_groups: "{{ 'PASS' if security_groups is succeeded else 'FAIL' }}"
+        keypairs: "{{ 'PASS' if keypairs is succeeded else 'FAIL' }}"
+
+  - name: Display test summary
+    debug:
+      msg: |
+        
+        ╔════════════════════════════════════════════════════════╗
+        ║           OpenStack Module Test Results               ║
+        ╠════════════════════════════════════════════════════════╣
+        ║  Authentication:    {{ test_results.authentication }}
+        ║  Image Service:     {{ test_results.images }}
+        ║  Network Service:   {{ test_results.networks }}
+        ║  Compute Service:   {{ test_results.flavors }}
+        ║  Volume Service:    {{ test_results.volumes }}
+        ║  Security Groups:   {{ test_results.security_groups }}
+        ║  Keypairs:          {{ test_results.keypairs }}
+        ╠════════════════════════════════════════════════════════╣
+        ║  Overall Status: {{ 'ALL TESTS PASSED ✓' if test_results.values() | select('equalto', 'FAIL') | list | length == 0 else 'SOME TESTS FAILED ✗' }}
+        ╚════════════════════════════════════════════════════════╝
+
+  - name: Check if all tests passed
+    assert:
+      that:
+      - test_results.authentication == 'PASS'
+      - test_results.images == 'PASS'
+      - test_results.networks == 'PASS'
+      - test_results.flavors == 'PASS'
+      fail_msg: |
+        
+        Some tests failed. Please check:
+        1. clouds.yaml is configured correctly
+        2. OpenStack credentials are valid
+        3. You have access to the OpenStack services
+        4. All required Python packages are installed (run: pip install -r requirements.txt)
+      success_msg: |
+        
+        ✓ All critical tests passed! 
+        You're ready to run the lab scenarios.
+
+        Next steps:
+        1. Review available scenarios in the lab guide
+        2. Start with: ansible-playbook scenario1_basic_vm.yml
+        3. Check README.md for detailed instructions
+
+# Usage:
+# ansible-playbook test-openstack.yml

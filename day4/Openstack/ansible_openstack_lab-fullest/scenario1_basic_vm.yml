@@ -87,17 +87,15 @@
         name: "{{ instance_name }}"
         flavor: "{{ flavor_name }}"
         network: "{{ network_name }}"
-        key_name: "{{ keypair_name }}"
-        security_groups:
-          - "{{ security_group_name }}"
-        boot_volume: "{{ volume_name }}"
-        terminate_volume: false
-        auto_ip: true
-        wait: yes
-        timeout: 300
-      register: server_result
-    
-    - name: Display server information
+      key_name: "{{ keypair_name }}"
+      security_groups:
+        - "{{ security_group_name }}"
+      boot_volume: "{{ volume_name }}"
+      terminate_volume: false
+      auto_ip: true
+      wait: yes
+      timeout: 600
+    register: server_result    - name: Display server information
       debug:
         msg: |
           Server created successfully:

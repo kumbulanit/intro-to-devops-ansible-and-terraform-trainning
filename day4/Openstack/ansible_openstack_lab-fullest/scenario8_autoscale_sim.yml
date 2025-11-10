@@ -106,7 +106,7 @@
       terminate_volume: false
       auto_ip: true
       wait: yes
-      timeout: 300
+      timeout: 600
     loop: "{{ range(1, count + 1) | list }}"
     register: servers_result
 

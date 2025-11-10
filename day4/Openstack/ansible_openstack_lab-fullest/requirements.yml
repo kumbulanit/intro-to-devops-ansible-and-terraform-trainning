@@ -1,0 +1,15 @@
+# OpenStack Ansible Collection Requirements
+# This file ensures all necessary Ansible collections are installed
+
+collections:
+- name: openstack.cloud
+  version: ">=2.1.0"
+
+- name: community.general
+  version: ">=7.0.0"
+
+- name: ansible.posix
+  version: ">=1.5.0"
+
+# Install with:
+# ansible-galaxy collection install -r requirements.yml

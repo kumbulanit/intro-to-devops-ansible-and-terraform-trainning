@@ -53,6 +53,7 @@
       port_range_max: 22
       remote_ip_prefix: 0.0.0.0/0
       state: present
+    ignore_errors: yes
 
   - name: Add HTTP rule to security group
     openstack.cloud.security_group_rule:
@@ -63,6 +64,7 @@
       port_range_max: 80
       remote_ip_prefix: 0.0.0.0/0
       state: present
+    ignore_errors: yes
 
   - name: Add HTTPS rule to security group
     openstack.cloud.security_group_rule:
@@ -73,6 +75,7 @@
       port_range_max: 443
       remote_ip_prefix: 0.0.0.0/0
       state: present
+    ignore_errors: yes
 
   - name: Add ICMP rule to security group
     openstack.cloud.security_group_rule:
@@ -81,6 +84,7 @@
       protocol: icmp
       remote_ip_prefix: 0.0.0.0/0
       state: present
+    ignore_errors: yes
 
   - name: Create SSH keypair if it doesn't exist
     openstack.cloud.keypair:
@@ -112,7 +116,7 @@
       terminate_volume: false
       auto_ip: true
       wait: yes
-      timeout: 300
+      timeout: 600
       meta:
         role: "backend"
         group: "webservers"
@@ -142,7 +146,7 @@
       terminate_volume: false
       auto_ip: true
       wait: yes
-      timeout: 300
+      timeout: 600
       meta:
         role: "loadbalancer"
         backends: "{{ backend_count }}"

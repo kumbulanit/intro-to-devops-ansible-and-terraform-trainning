@@ -1,0 +1,279 @@
+---
+- name: Scenario 16 - Full Production-Ready Stack
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cloud_name: "mycloud"
+    image_name: "ubuntu-22.04"
+    flavor_name: "m1.small"
+    network_name: "production-net"
+    subnet_name: "production-subnet"
+    router_name: "production-router"
+    keypair_name: "demo-key"
+    security_group_web: "prod-web-sg"
+    security_group_db: "prod-db-sg"
+    security_group_lb: "prod-lb-sg"
+    lb_name: "prod-lb"
+    web_prefix: "prod-web"
+    web_count: 2
+    db_name: "prod-db"
+    volume_size_web: 15
+    volume_size_db: 30
+    volume_size_lb: 10
+
+  tasks:
+  # Network Infrastructure
+  - name: Create production network
+    openstack.cloud.network:
+      cloud: "{{ cloud_name }}"
+      name: "{{ network_name }}"
+      state: present
+    register: network_result
+
+  - name: Create production subnet
+    openstack.cloud.subnet:
+      cloud: "{{ cloud_name }}"
+      name: "{{ subnet_name }}"
+      network_name: "{{ network_name }}"
+      cidr: "192.168.200.0/24"
+      gateway_ip: "192.168.200.1"
+      ip_version: 4
+      dns_nameservers:
+      - 8.8.8.8
+      - 1.1.1.1
+      enable_dhcp: true
+      state: present
+
+  - name: Create production router
+    openstack.cloud.router:
+      cloud: "{{ cloud_name }}"
+      name: "{{ router_name }}"
+      network: "public"
+      state: present
+    register: router_result
+
+  - name: Attach router to subnet
+    openstack.cloud.router_interface:
+      cloud: "{{ cloud_name }}"
+      router: "{{ router_name }}"
+      subnet: "{{ subnet_name }}"
+      state: present
+
+  # Security Groups
+  - name: Create load balancer security group
+    openstack.cloud.security_group:
+      cloud: "{{ cloud_name }}"
+      name: "{{ security_group_lb }}"
+      description: "Security group for load balancer"
+      state: present
+
+  - name: Add rules to LB security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_lb }}"
+      protocol: "{{ item.protocol }}"
+      port_range_min: "{{ item.port_min }}"
+      port_range_max: "{{ item.port_max }}"
+      remote_ip_prefix: "{{ item.cidr }}"
+      state: present
+    loop:
+    - { protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
+    - { protocol: tcp, port_min: 80, port_max: 80, cidr: "0.0.0.0/0" }
+    - { protocol: tcp, port_min: 443, port_max: 443, cidr: "0.0.0.0/0" }
+    - { protocol: icmp, port_min: -1, port_max: -1, cidr: "0.0.0.0/0" }
+    ignore_errors: yes
+
+  - name: Create web servers security group
+    openstack.cloud.security_group:
+      cloud: "{{ cloud_name }}"
+      name: "{{ security_group_web }}"
+      description: "Security group for web servers"
+      state: present
+
+  - name: Add rules to web security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_web }}"
+      protocol: "{{ item.protocol }}"
+      port_range_min: "{{ item.port_min }}"
+      port_range_max: "{{ item.port_max }}"
+      remote_ip_prefix: "{{ item.cidr }}"
+      state: present
+    loop:
+    - { protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
+    - { protocol: tcp, port_min: 80, port_max: 80, cidr: "192.168.200.0/24" }
+    - { protocol: tcp, port_min: 443, port_max: 443, cidr: "192.168.200.0/24" }
+    - { protocol: icmp, port_min: -1, port_max: -1, cidr: "0.0.0.0/0" }
+    ignore_errors: yes
+
+  - name: Create database security group
+    openstack.cloud.security_group:
+      cloud: "{{ cloud_name }}"
+      name: "{{ security_group_db }}"
+      description: "Security group for database server"
+      state: present
+
+  - name: Add rules to DB security group
+    openstack.cloud.security_group_rule:
+      cloud: "{{ cloud_name }}"
+      security_group: "{{ security_group_db }}"
+      protocol: "{{ item.protocol }}"
+      port_range_min: "{{ item.port_min }}"
+      port_range_max: "{{ item.port_max }}"
+      remote_ip_prefix: "{{ item.cidr }}"
+      state: present
+    loop:
+    - { protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
+    - { protocol: tcp, port_min: 3306, port_max: 3306, cidr: "192.168.200.0/24" }
+    - { protocol: icmp, port_min: -1, port_max: -1, cidr: "0.0.0.0/0" }
+    ignore_errors: yes
+
+  # SSH Keypair
+  - name: Create SSH keypair
+    openstack.cloud.keypair:
+      cloud: "{{ cloud_name }}"
+      name: "{{ keypair_name }}"
+      public_key_file: "~/.ssh/id_rsa.pub"
+      state: present
+
+  # Volumes for all VMs
+  - name: Create volumes for web servers
+    openstack.cloud.volume:
+      cloud: "{{ cloud_name }}"
+      display_name: "{{ web_prefix }}{{ item }}-volume"
+      size: "{{ volume_size_web }}"
+      image: "{{ image_name }}"
+      bootable: true
+      state: present
+    loop: "{{ range(1, web_count + 1) | list }}"
+
+  - name: Create volume for database server
+    openstack.cloud.volume:
+      cloud: "{{ cloud_name }}"
+      display_name: "{{ db_name }}-volume"
+      size: "{{ volume_size_db }}"
+      image: "{{ image_name }}"
+      bootable: true
+      state: present
+
+  - name: Create volume for load balancer
+    openstack.cloud.volume:
+      cloud: "{{ cloud_name }}"
+      display_name: "{{ lb_name }}-volume"
+      size: "{{ volume_size_lb }}"
+      image: "{{ image_name }}"
+      bootable: true
+      state: present
+
+  # Deploy VMs
+  - name: Deploy database server
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "{{ db_name }}"
+      flavor: "{{ flavor_name }}"
+      network: "{{ network_name }}"
+      key_name: "{{ keypair_name }}"
+      security_groups:
+      - "{{ security_group_db }}"
+      boot_volume: "{{ db_name }}-volume"
+      terminate_volume: false
+      auto_ip: false
+      wait: yes
+      timeout: 600
+      meta:
+        role: "database"
+        tier: "backend"
+        environment: "production"
+    register: db_server
+
+  - name: Deploy web servers
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "{{ web_prefix }}{{ item }}"
+      flavor: "{{ flavor_name }}"
+      network: "{{ network_name }}"
+      key_name: "{{ keypair_name }}"
+      security_groups:
+      - "{{ security_group_web }}"
+      boot_volume: "{{ web_prefix }}{{ item }}-volume"
+      terminate_volume: false
+      auto_ip: false
+      wait: yes
+      timeout: 600
+      meta:
+        role: "webserver"
+        tier: "application"
+        environment: "production"
+    loop: "{{ range(1, web_count + 1) | list }}"
+    register: web_servers
+
+  - name: Deploy load balancer
+    openstack.cloud.server:
+      cloud: "{{ cloud_name }}"
+      name: "{{ lb_name }}"
+      flavor: "{{ flavor_name }}"
+      network: "{{ network_name }}"
+      key_name: "{{ keypair_name }}"
+      security_groups:
+      - "{{ security_group_lb }}"
+      boot_volume: "{{ lb_name }}-volume"
+      terminate_volume: false
+      auto_ip: true
+      wait: yes
+      timeout: 600
+      meta:
+        role: "loadbalancer"
+        tier: "frontend"
+        environment: "production"
+    register: lb_server
+
+  - name: Display full stack deployment information
+    debug:
+      msg: |
+        ╔═══════════════════════════════════════════════════════════════╗
+        ║         PRODUCTION STACK DEPLOYED SUCCESSFULLY                ║
+        ╚═══════════════════════════════════════════════════════════════╝
+
+        Network Infrastructure:
+        ├── Network: {{ network_name }}
+        ├── Subnet: {{ subnet_name }} (192.168.200.0/24)
+        └── Router: {{ router_name }} (connected to public network)
+
+        Load Balancer (Frontend Tier):
+        ├── Name: {{ lb_server.server.name }}
+        ├── IP: {{ lb_server.server.addresses }}
+        ├── Security Group: {{ security_group_lb }}
+        └── Ports: 80, 443 (public), 22 (management)
+
+        Web Servers (Application Tier):
+        {% for server in web_servers.results %}
+        ├── {{ server.server.name }}
+        │   ├── IP: {{ server.server.addresses }}
+        │   └── Security Group: {{ security_group_web }}
+        {% endfor %}
+
+        Database Server (Backend Tier):
+        ├── Name: {{ db_server.server.name }}
+        ├── IP: {{ db_server.server.addresses }}
+        ├── Security Group: {{ security_group_db }}
+        └── Port: 3306 (MySQL, internal only)
+
+        Security Groups:
+        ├── {{ security_group_lb }}: Public access on 80/443
+        ├── {{ security_group_web }}: Internal access from LB
+        └── {{ security_group_db }}: Internal access from web tier
+
+        Storage Volumes:
+        ├── Load Balancer: {{ volume_size_lb }}GB
+        ├── Web Servers: {{ volume_size_web }}GB each ({{ web_count }} servers)
+        └── Database: {{ volume_size_db }}GB
+
+        Next Steps:
+        ════════════════════════════════════════════════════════════════
+        1. Access LB: ssh -i ~/.ssh/id_rsa ubuntu@<lb-public-ip>
+        2. Configure HAProxy on load balancer
+        3. Deploy application to web servers
+        4. Configure MySQL on database server
+        5. Test load balancing: curl http://<lb-public-ip>
+
+        Teardown: ansible-playbook teardown_scenario16.yml

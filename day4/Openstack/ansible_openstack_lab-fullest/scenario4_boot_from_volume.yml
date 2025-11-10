@@ -103,7 +103,7 @@
       terminate_volume: false
       auto_ip: true
       wait: yes
-      timeout: 300
+      timeout: 600
     register: server_result
 
   - name: Display VM information
