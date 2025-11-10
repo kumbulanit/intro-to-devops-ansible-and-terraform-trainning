@@ -1,8 +1,35 @@
 ---
 - name: Teardown Scenario 1 - Basic VM
   hosts: localhost
+  gather_facts: false
+  vars:
+    instance_name: "basic-vm"
+    volume_name: "basic-vm-volume"
+    security_group_name: "basic-sg"
+    network_name: "private"
+  
   tasks:
     - name: Delete instance
       openstack.cloud.server:
-        name: "basic-vm"
+        name: "{{ instance_name }}"
         state: absent
+        wait: yes
+        timeout: 180
+    
+    - name: Wait for instance to be fully deleted
+      pause:
+        seconds: 10
+    
+    - name: Delete volume
+      openstack.cloud.volume:
+        display_name: "{{ volume_name }}"
+        state: absent
+    
+    - name: Delete security group
+      openstack.cloud.security_group:
+        name: "{{ security_group_name }}"
+        state: absent
+    
+    - name: Display teardown completion
+      debug:
+        msg: "Scenario 1 resources have been cleaned up successfully"

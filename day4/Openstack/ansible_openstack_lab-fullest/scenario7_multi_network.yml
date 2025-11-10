@@ -5,12 +5,61 @@
   vars:
     frontend_net: "frontend-net"
     backend_net: "backend-net"
+    frontend_subnet: "frontend-subnet"
+    backend_subnet: "backend-subnet"
     frontend_vm: "frontend"
     backend_vm: "backend"
     image_name: "ubuntu"
     flavor_name: "m1.small"
     keypair_name: "demo-key"
+    security_group_name: "multi-net-sg"
+    frontend_volume: "frontend-volume"
+    backend_volume: "backend-volume"
+    volume_size: 10
+  
   tasks:
+    - name: Create security group
+      openstack.cloud.security_group:
+        name: "{{ security_group_name }}"
+        description: "Security group for multi-network VMs"
+        state: present
+    
+    - name: Add SSH rule
+      openstack.cloud.security_group_rule:
+        security_group: "{{ security_group_name }}"
+        protocol: tcp
+        port_range_min: 22
+        port_range_max: 22
+        remote_ip_prefix: 0.0.0.0/0
+    
+    - name: Add HTTP rule
+      openstack.cloud.security_group_rule:
+        security_group: "{{ security_group_name }}"
+        protocol: tcp
+        port_range_min: 80
+        port_range_max: 80
+        remote_ip_prefix: 0.0.0.0/0
+    
+    - name: Add HTTPS rule
+      openstack.cloud.security_group_rule:
+        security_group: "{{ security_group_name }}"
+        protocol: tcp
+        port_range_min: 443
+        port_range_max: 443
+        remote_ip_prefix: 0.0.0.0/0
+    
+    - name: Add ICMP rule
+      openstack.cloud.security_group_rule:
+        security_group: "{{ security_group_name }}"
+        protocol: icmp
+        remote_ip_prefix: 0.0.0.0/0
+    
+    - name: Create SSH keypair if not exists
+      openstack.cloud.keypair:
+        name: "{{ keypair_name }}"
+        public_key_file: "~/.ssh/id_rsa.pub"
+        state: present
+    
     - name: Create frontend and backend networks
       openstack.cloud.network:
         name: "{{ item }}"
@@ -18,15 +67,77 @@
       loop:
         - "{{ frontend_net }}"
         - "{{ backend_net }}"
-
-    - name: Create frontend and backend VMs
-      openstack.cloud.server:
-        name: "{{ item.name }}"
+      register: networks_result
+    
+    - name: Create frontend subnet
+      openstack.cloud.subnet:
+        name: "{{ frontend_subnet }}"
+        network_name: "{{ frontend_net }}"
+        cidr: "192.168.10.0/24"
+        gateway_ip: "192.168.10.1"
+        ip_version: 4
+        dns_nameservers:
+          - 8.8.8.8
+          - 1.1.1.1
+        enable_dhcp: true
+        state: present
+    
+    - name: Create backend subnet
+      openstack.cloud.subnet:
+        name: "{{ backend_subnet }}"
+        network_name: "{{ backend_net }}"
+        cidr: "192.168.20.0/24"
+        gateway_ip: "192.168.20.1"
+        ip_version: 4
+        dns_nameservers:
+          - 8.8.8.8
+          - 1.1.1.1
+        enable_dhcp: true
+        state: present
+    
+    - name: Create volumes for VMs
+      openstack.cloud.volume:
+        display_name: "{{ item }}"
+        size: "{{ volume_size }}"
         image: "{{ image_name }}"
-        flavor: "{{ flavor_name }}"
-        networks:
-          - name: "{{ item.net }}"
-        key_name: "{{ keypair_name }}"
+        bootable: true
+        state: present
       loop:
-        - { name: "{{ frontend_vm }}", net: "{{ frontend_net }}" }
-        - { name: "{{ backend_vm }}", net: "{{ backend_net }}" }
+        - "{{ frontend_volume }}"
+        - "{{ backend_volume }}"
+    
+    - name: Create frontend VM
+      openstack.cloud.server:
+        name: "{{ frontend_vm }}"
+        flavor: "{{ flavor_name }}"
+        boot_volume: "{{ frontend_volume }}"
+        terminate_volume: false
+        network: "{{ frontend_net }}"
+        key_name: "{{ keypair_name }}"
+        security_groups:
+          - "{{ security_group_name }}"
+        auto_ip: true
+        wait: yes
+        timeout: 300
+      register: frontend_server
+    
+    - name: Create backend VM
+      openstack.cloud.server:
+        name: "{{ backend_vm }}"
+        flavor: "{{ flavor_name }}"
+        boot_volume: "{{ backend_volume }}"
+        terminate_volume: false
+        network: "{{ backend_net }}"
+        key_name: "{{ keypair_name }}"
+        security_groups:
+          - "{{ security_group_name }}"
+        auto_ip: true
+        wait: yes
+        timeout: 300
+      register: backend_server
+    
+    - name: Display VM information
+      debug:
+        msg: |
+          Frontend VM: {{ frontend_server.server.name }} - {{ frontend_server.server.addresses }}
+          Backend VM: {{ backend_server.server.name }} - {{ backend_server.server.addresses }}

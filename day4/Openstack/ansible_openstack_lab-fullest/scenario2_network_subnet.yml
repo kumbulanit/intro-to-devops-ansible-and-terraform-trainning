@@ -6,20 +6,48 @@
     network_name: "training-net"
     subnet_name: "training-subnet"
     cidr: "192.168.50.0/24"
+    gateway_ip: "192.168.50.1"
+    allocation_pool_start: "192.168.50.10"
+    allocation_pool_end: "192.168.50.250"
     dns_nameservers:
       - 8.8.8.8
       - 1.1.1.1
+  
   tasks:
     - name: Create internal network
       openstack.cloud.network:
         name: "{{ network_name }}"
         state: present
-
+      register: network_result
+    
+    - name: Display network information
+      debug:
+        msg: |
+          Network created:
+          Name: {{ network_result.network.name }}
+          ID: {{ network_result.network.id }}
+          Status: {{ network_result.network.status }}
+    
     - name: Create subnet
       openstack.cloud.subnet:
         name: "{{ subnet_name }}"
         network_name: "{{ network_name }}"
         cidr: "{{ cidr }}"
+        gateway_ip: "{{ gateway_ip }}"
+        allocation_pool_start: "{{ allocation_pool_start }}"
+        allocation_pool_end: "{{ allocation_pool_end }}"
         ip_version: 4
         dns_nameservers: "{{ dns_nameservers }}"
         enable_dhcp: true
+        state: present
+      register: subnet_result
+    
+    - name: Display subnet information
+      debug:
+        msg: |
+          Subnet created:
+          Name: {{ subnet_result.subnet.name }}
+          ID: {{ subnet_result.subnet.id }}
+          CIDR: {{ subnet_result.subnet.cidr }}
+          Gateway IP: {{ subnet_result.subnet.gateway_ip }}
+          DNS Servers: {{ subnet_result.subnet.dns_nameservers }}

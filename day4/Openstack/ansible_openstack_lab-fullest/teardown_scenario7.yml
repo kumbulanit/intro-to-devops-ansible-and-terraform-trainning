@@ -1,19 +1,62 @@
 ---
 - name: Teardown Scenario 7 - Multi-Network VMs
   hosts: localhost
+  gather_facts: false
+  vars:
+    frontend_vm: "frontend"
+    backend_vm: "backend"
+    frontend_net: "frontend-net"
+    backend_net: "backend-net"
+    frontend_subnet: "frontend-subnet"
+    backend_subnet: "backend-subnet"
+    frontend_volume: "frontend-volume"
+    backend_volume: "backend-volume"
+    security_group_name: "multi-net-sg"
+  
   tasks:
     - name: Delete frontend and backend VMs
       openstack.cloud.server:
         name: "{{ item }}"
         state: absent
+        wait: yes
+        timeout: 180
       loop:
-        - frontend
-        - backend
-
+        - "{{ frontend_vm }}"
+        - "{{ backend_vm }}"
+    
+    - name: Wait for VMs to be fully deleted
+      pause:
+        seconds: 10
+    
+    - name: Delete volumes
+      openstack.cloud.volume:
+        display_name: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ frontend_volume }}"
+        - "{{ backend_volume }}"
+    
+    - name: Delete subnets
+      openstack.cloud.subnet:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ frontend_subnet }}"
+        - "{{ backend_subnet }}"
+    
     - name: Delete frontend and backend networks
       openstack.cloud.network:
         name: "{{ item }}"
         state: absent
       loop:
-        - frontend-net
-        - backend-net
+        - "{{ frontend_net }}"
+        - "{{ backend_net }}"
+    
+    - name: Delete security group
+      openstack.cloud.security_group:
+        name: "{{ security_group_name }}"
+        state: absent
+    
+    - name: Display teardown completion
+      debug:
+        msg: "Scenario 7 multi-network resources have been cleaned up successfully"

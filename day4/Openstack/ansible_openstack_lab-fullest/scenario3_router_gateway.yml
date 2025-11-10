@@ -5,16 +5,50 @@
   vars:
     router_name: "training-router"
     ext_net: "public"
+    network_name: "training-net"
     subnet_name: "training-subnet"
+    subnet_cidr: "192.168.50.0/24"
+  
   tasks:
+    - name: Ensure training network exists
+      openstack.cloud.network:
+        name: "{{ network_name }}"
+        state: present
+      register: network_result
+    
+    - name: Ensure training subnet exists
+      openstack.cloud.subnet:
+        name: "{{ subnet_name }}"
+        network_name: "{{ network_name }}"
+        cidr: "{{ subnet_cidr }}"
+        gateway_ip: "192.168.50.1"
+        ip_version: 4
+        dns_nameservers:
+          - 8.8.8.8
+          - 1.1.1.1
+        enable_dhcp: true
+        state: present
+      register: subnet_result
+    
     - name: Create router
       openstack.cloud.router:
         name: "{{ router_name }}"
         network: "{{ ext_net }}"
         state: present
-
+      register: router_result
+    
     - name: Attach router to subnet
       openstack.cloud.router_interface:
         router: "{{ router_name }}"
         subnet: "{{ subnet_name }}"
         state: present
+      register: interface_result
+    
+    - name: Display router information
+      debug:
+        msg: |
+          Router configured successfully:
+          Router Name: {{ router_name }}
+          External Network: {{ ext_net }}
+          Connected Subnet: {{ subnet_name }} ({{ subnet_cidr }})
+          Gateway IP: 192.168.50.1
