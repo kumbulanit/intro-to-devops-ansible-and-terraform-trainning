@@ -189,33 +189,15 @@ EOF
 ### Create Master Inventory File
 
 ```bash
-# Create standard inventory for all labs
-mkdir -p ~/ansible_training/day5/labs
-cd ~/ansible_training/day5/labs
+### Create Working Directory
 
+```bash
+# Create labs directory for testing
+mkdir -p ~/ansible_training/day5/ansible-roles-galaxy/playbooks
+cd ~/ansible_training/day5/ansible-roles-galaxy/playbooks
+
+# Create standard inventory file
 cat > inventory.ini <<'EOF'
-[webservers]
-openstack-vm ansible_host=REPLACE_WITH_YOUR_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/openstack_key
-
-[databases]
-openstack-vm ansible_host=REPLACE_WITH_YOUR_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/openstack_key
-
-[loadbalancers]
-openstack-vm ansible_host=REPLACE_WITH_YOUR_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/openstack_key
-
-[appservers]
-openstack-vm ansible_host=REPLACE_WITH_YOUR_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/openstack_key
-
-[all:vars]
-ansible_python_interpreter=/usr/bin/python3
-ansible_ssh_common_args='-o StrictHostKeyChecking=no'
-EOF
-
-# Replace IP address with your actual IP
-sed -i "s/REPLACE_WITH_YOUR_IP/$FLOATING_IP/g" inventory.ini
-
-# Or manually edit
-nano inventory.ini
 ```
 
 ### Test Connectivity
@@ -260,7 +242,7 @@ firefox http://$FLOATING_IP  # or your browser
 ### Lab 2: Database Role
 
 ```bash
-cd ~/ansible_training/day5/labs
+cd ~/ansible_training/day5/ansible-roles-galaxy/playbooks
 
 # Ensure security group allows PostgreSQL
 openstack security group rule list ansible-testing | grep 5432

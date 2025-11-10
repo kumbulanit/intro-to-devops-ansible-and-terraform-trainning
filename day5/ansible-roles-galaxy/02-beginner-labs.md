@@ -32,8 +32,8 @@ openstack server list
 
 ```bash
 # 1. Create your working directory
-mkdir -p ~/ansible_training/day5/labs
-cd ~/ansible_training/day5/labs
+mkdir -p ~/ansible_training/day5/ansible-roles-galaxy/playbooks
+cd ~/ansible_training/day5/ansible-roles-galaxy/playbooks
 
 # 2. Create inventory file for your OpenStack instance
 cat > inventory.ini <<EOF
@@ -91,7 +91,7 @@ Create a simple Ansible role that installs and configures Nginx web server on yo
 
 ```bash
 # Navigate to your lab workspace
-cd ~/ansible_training/day5/labs
+cd ~/ansible_training/day5/ansible-roles-galaxy/playbooks
 
 # Create roles directory
 mkdir -p roles
@@ -380,7 +380,7 @@ Now let's create a playbook to deploy our role to your OpenStack instance:
 
 ```bash
 # Go back to your lab directory
-cd ~/ansible_training/day5/labs
+cd ~/ansible_training/day5/ansible-roles-galaxy/playbooks
 
 # Create the test playbook
 nano test-nginx-role.yml
@@ -829,7 +829,7 @@ Create multiple roles that work together and understand role dependencies.
 #### Step 1: Create a Common Role
 
 ```bash
-cd ~/ansible_training/day5/roles/
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/
 ansible-galaxy init common
 ```
 
@@ -1083,7 +1083,7 @@ Learn how to organize and manage multiple roles using ansible.cfg and role paths
 #### Step 1: Create Directory Structure
 
 ```bash
-cd ~/ansible_training/day5/
+cd ~/ansible_training/day5/ansible-roles-galaxy/
 
 # Create organized structure
 mkdir -p {roles/custom,roles/community,roles/internal}

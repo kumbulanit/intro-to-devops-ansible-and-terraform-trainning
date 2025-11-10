@@ -224,7 +224,7 @@ Four production-focused labs:
 
 ```bash
 # All labs 1-9 can use local Docker
-cd ~/ansible_training/day5/roles/
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/
 molecule test
 ```
 
@@ -279,7 +279,7 @@ molecule test -s openstack
 
 1. **Set up workspace**:
 ```bash
-cd ~/ansible_training/day5/
+cd ~/ansible_training/day5/ansible-roles-galaxy/
 mkdir -p roles/custom roles/galaxy
 cd roles/
 ```

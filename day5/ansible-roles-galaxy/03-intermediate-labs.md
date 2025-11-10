@@ -29,11 +29,11 @@ These intermediate labs cover testing with Molecule, publishing to Galaxy, and G
 
 ```bash
 # Create intermediate labs workspace
-mkdir -p ~/ansible_training/day5/intermediate-labs
-cd ~/ansible_training/day5/intermediate-labs
+mkdir -p ~/ansible_training/day5/ansible-roles-galaxy/intermediate-labs
+cd ~/ansible_training/day5/ansible-roles-galaxy/intermediate-labs
 
 # For OpenStack testing, verify connection
-ansible all -i ../labs/inventory.ini -m ping
+ansible all -i ../playbooks/inventory.ini -m ping
 
 # For Docker testing, verify Docker
 docker --version
@@ -71,7 +71,7 @@ Learn to test Ansible roles using Molecule with Docker driver, with optional Ope
 
 ```bash
 # Navigate to your working directory
-cd ~/ansible_training/day5/intermediate-labs
+cd ~/ansible_training/day5/ansible-roles-galaxy/intermediate-labs
 
 # Install Molecule with Docker driver
 pip3 install molecule[docker]
@@ -117,7 +117,7 @@ python3 -m pip install --user molecule[docker]
 
 ```bash
 # Navigate to roles directory
-cd ~/ansible_training/day5/roles/
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/
 
 # Create role with Molecule setup using ansible-galaxy
 ansible-galaxy init --init-path custom/ apache-molecule
@@ -492,7 +492,7 @@ nano molecule/default/verify.yml
 **From the role directory, run:**
 ```bash
 # Make sure you're in the role directory
-cd ~/ansible_training/day5/roles/custom/apache-molecule
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/custom/apache-molecule
 
 # Run full test sequence (this takes 2-5 minutes)
 molecule test
@@ -692,7 +692,7 @@ openstack server add floating ip apache-molecule-test <FLOATING_IP>
 
 **Create inventory file:**
 ```bash
-cd ~/ansible_training/day5/intermediate-labs
+cd ~/ansible_training/day5/ansible-roles-galaxy/intermediate-labs
 nano inventory-openstack.ini
 ```
 
@@ -931,7 +931,7 @@ Test your role across multiple operating systems using Molecule to ensure cross-
 
 **Create or use existing role:**
 ```bash
-cd ~/ansible_training/day5/roles/custom/apache-molecule
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/custom/apache-molecule
 
 # Backup existing molecule config
 cp molecule/default/molecule.yml molecule/default/molecule.yml.backup
@@ -1442,7 +1442,7 @@ htmlcov/
 #### Step 5: Initialize Git Repository
 
 ```bash
-cd ~/ansible_training/day5/roles/custom/apache-molecule/
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/custom/apache-molecule/
 
 # Initialize git
 git init
@@ -1781,7 +1781,7 @@ Create custom Molecule scenarios for different testing needs.
 #### Step 1: Create Production Scenario
 
 ```bash
-cd ~/ansible_training/day5/roles/custom/apache-molecule/
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/custom/apache-molecule/
 
 # Create production test scenario
 molecule init scenario production --driver-name docker

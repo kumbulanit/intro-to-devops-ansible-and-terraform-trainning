@@ -51,7 +51,7 @@ Master role dependencies, conflicts resolution, and using Ansible Collections.
 
 ```bash
 # Navigate to custom roles directory
-cd ~/ansible_training/day5/roles/custom/
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/custom/
 
 # Create base infrastructure role
 ansible-galaxy init infra-base
@@ -227,7 +227,7 @@ Create `handlers/main.yml`:
 #### Step 2: Create Application Role with Complex Dependencies
 
 ```bash
-cd ~/ansible_training/day5/roles/custom/
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/custom/
 ansible-galaxy init webapp-stack
 
 cd webapp-stack
@@ -599,7 +599,7 @@ openstack server list
 **What this does**: Creates a Molecule test scenario that provisions real OpenStack instances.
 
 ```bash
-cd ~/ansible_training/day5/roles/custom/webapp-stack/
+cd ~/ansible_training/day5/ansible-roles-galaxy/roles/custom/webapp-stack/
 
 # Create OpenStack scenario (in addition to default Docker scenario)
 molecule init scenario openstack --driver-name openstack
@@ -785,7 +785,7 @@ ssh ubuntu@<FLOATING_IP>
 
 ```bash
 # Navigate to working directory
-cd ~/ansible_training/day5/advanced-labs
+cd ~/ansible_training/day5/ansible-roles-galaxy/advanced-labs
 
 # Check available resources
 openstack image list
@@ -937,7 +937,7 @@ nano test-webapp-openstack.yml
       tags: always
   
   roles:
-    - role: ~/ansible_training/day5/roles/custom/webapp-stack
+    - role: ~/ansible_training/day5/ansible-roles-galaxy/roles/custom/webapp-stack
       vars:
         use_postgres: true
         use_nginx: true
