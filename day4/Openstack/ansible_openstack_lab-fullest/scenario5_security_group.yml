@@ -25,6 +25,7 @@
       remote_ip_prefix: 0.0.0.0/0
       direction: ingress
       state: present
+    ignore_errors: yes
 
   - name: Add HTTP rule
     openstack.cloud.security_group_rule:
@@ -36,6 +37,7 @@
       remote_ip_prefix: 0.0.0.0/0
       direction: ingress
       state: present
+    ignore_errors: yes
 
   - name: Add HTTPS rule
     openstack.cloud.security_group_rule:
@@ -47,6 +49,7 @@
       remote_ip_prefix: 0.0.0.0/0
       direction: ingress
       state: present
+    ignore_errors: yes
 
   - name: Add ICMP rule (ping)
     openstack.cloud.security_group_rule:
@@ -56,6 +59,7 @@
       remote_ip_prefix: 0.0.0.0/0
       direction: ingress
       state: present
+    ignore_errors: yes
 
   - name: Display security group information
     debug:

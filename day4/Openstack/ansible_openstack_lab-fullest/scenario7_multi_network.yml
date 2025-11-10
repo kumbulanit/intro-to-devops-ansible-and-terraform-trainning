@@ -34,6 +34,8 @@
       port_range_min: 22
       port_range_max: 22
       remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+    ignore_errors: yes
 
   - name: Add HTTP rule
     openstack.cloud.security_group_rule:
@@ -43,6 +45,8 @@
       port_range_min: 80
       port_range_max: 80
       remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+    ignore_errors: yes
 
   - name: Add HTTPS rule
     openstack.cloud.security_group_rule:
@@ -52,6 +56,8 @@
       port_range_min: 443
       port_range_max: 443
       remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+    ignore_errors: yes
 
   - name: Add ICMP rule
     openstack.cloud.security_group_rule:
@@ -59,6 +65,8 @@
       security_group: "{{ security_group_name }}"
       protocol: icmp
       remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
+    ignore_errors: yes
 
   - name: Create SSH keypair if not exists
     openstack.cloud.keypair:
