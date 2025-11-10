@@ -1,0 +1,413 @@
+---
+- name: Rolling Deployment with Zero Downtime
+  hosts: webservers
+  become: yes
+  serial: 1 # Deploy one server at a time
+  max_fail_percentage: 0 # Stop deployment if any server fails
+
+  vars:
+    app_version: "{{ version | default('2.0.0') }}"
+    app_dir: /opt/myapp
+    backup_dir: /var/backups/myapp
+    health_check_url: "http://localhost:8080/health"
+    health_check_retries: 5
+    health_check_delay: 10
+    timestamp: "{{ ansible_date_time.epoch }}"
+
+  tasks:
+  - name: Rolling deployment with automatic rollback
+    block:
+    # Pre-deployment validation
+    - name: Display deployment target
+      debug:
+        msg: |
+          ================================================
+          Rolling Deployment Starting
+          ================================================
+          Target: {{ inventory_hostname }}
+          Version: {{ app_version }}
+          Progress: {{ ansible_play_hosts.index(inventory_hostname) + 1 }} of {{ ansible_play_hosts | length }}
+
+    - name: Check current application status
+      uri:
+        url: "{{ health_check_url }}"
+        status_code: 200
+      register: pre_deploy_health
+      ignore_errors: yes
+
+    - name: Store current version
+      slurp:
+        src: "{{ app_dir }}/version.txt"
+      register: current_version
+      ignore_errors: yes
+
+    - name: Display current state
+      debug:
+        msg: |
+          Current state:
+          - Health: {{ 'OK' if pre_deploy_health.status == 200 else 'DOWN' }}
+          - Version: {{ (current_version.content | b64decode).strip() if current_version.content is defined else 'Unknown' }}
+
+    # Remove from load balancer
+    - name: Remove server from load balancer
+      haproxy:
+        state: disabled
+        host: "{{ inventory_hostname }}"
+        socket: /var/run/haproxy.sock
+        backend: web_backend
+      delegate_to: "{{ groups['loadbalancer'][0] }}"
+      when: groups['loadbalancer'] is defined
+      ignore_errors: yes
+
+    - name: Wait for connections to drain
+      wait_for:
+        timeout: 15
+      delegate_to: localhost
+
+    # Backup current version
+    - name: Ensure backup directory exists
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Backup current application
+      archive:
+        path: "{{ app_dir }}"
+        dest: "{{ backup_dir }}/app_{{ inventory_hostname }}_{{ timestamp }}.tar.gz"
+        format: gz
+      when: app_dir is directory
+      register: backup_result
+
+    - name: Display backup info
+      debug:
+        msg: "Backup created: {{ backup_result.dest }}"
+      when: backup_result.dest is defined
+
+    # Stop application
+    - name: Stop application service
+      systemd:
+        name: myapp
+        state: stopped
+      register: app_stopped
+
+    - name: Verify application stopped
+      wait_for:
+        port: 8080
+        state: stopped
+        timeout: 30
+
+    # Deploy new version
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Download new application version
+      get_url:
+        url: "https://releases.example.com/myapp-{{ app_version }}.tar.gz"
+        dest: "/tmp/myapp-{{ app_version }}.tar.gz"
+        timeout: 60
+      register: download
+      failed_when: false # Simulate for testing
+
+    # For testing, create a mock application
+    - name: Create mock application (for testing)
+      copy:
+        content: |
+          #!/bin/bash
+          # Mock application version {{ app_version }}
+
+          echo "Starting MyApp {{ app_version }}..."
+
+          # Simulate application startup
+          while true; do
+              if [ -f /tmp/myapp_stop ]; then
+                  echo "Stopping MyApp"
+                  rm /tmp/myapp_stop
+                  exit 0
+              fi
+              sleep 1
+          done
+        dest: "{{ app_dir }}/myapp.sh"
+        mode: '0755'
+      when: download is not succeeded
+
+    - name: Create version file
+      copy:
+        content: "{{ app_version }}"
+        dest: "{{ app_dir }}/version.txt"
+        mode: '0644'
+
+    - name: Create mock health endpoint
+      copy:
+        content: |
+          #!/bin/bash
+          # Health check endpoint
+          echo "HTTP/1.1 200 OK"
+          echo "Content-Type: application/json"
+          echo ""
+          echo '{"status":"healthy","version":"{{ app_version }}","hostname":"{{ inventory_hostname }}"}'
+        dest: "{{ app_dir }}/health.sh"
+        mode: '0755'
+
+    # Start application
+    - name: Start application service
+      systemd:
+        name: myapp
+        state: started
+        enabled: yes
+      register: app_started
+
+    - name: Wait for application to initialize
+      wait_for:
+        port: 8080
+        delay: 5
+        timeout: 60
+
+    # Health checks
+    - name: Perform health check
+      uri:
+        url: "{{ health_check_url }}"
+        status_code: 200
+        return_content: yes
+      register: health_check
+      until: health_check.status == 200
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+
+    - name: Verify version deployed correctly
+      assert:
+        that:
+        - "'{{ app_version }}' in health_check.content"
+        fail_msg: "Version mismatch in health check response"
+        success_msg: "Correct version deployed and verified"
+
+    - name: Extended health monitoring
+      uri:
+        url: "{{ health_check_url }}"
+        status_code: 200
+      register: extended_health
+      until: extended_health.status == 200
+      retries: 3
+      delay: 10
+
+    # Add back to load balancer
+    - name: Add server back to load balancer
+      haproxy:
+        state: enabled
+        host: "{{ inventory_hostname }}"
+        socket: /var/run/haproxy.sock
+        backend: web_backend
+      delegate_to: "{{ groups['loadbalancer'][0] }}"
+      when: groups['loadbalancer'] is defined
+      ignore_errors: yes
+
+    - name: Warm up period
+      pause:
+        seconds: 10
+        prompt: "Warming up {{ inventory_hostname }}..."
+
+    - name: Post-deployment health check
+      uri:
+        url: "{{ health_check_url }}"
+        status_code: 200
+      register: post_deploy_health
+
+    - name: Deployment success for this server
+      debug:
+        msg: |
+          ✅ {{ inventory_hostname }} deployed successfully!
+          - Version: {{ app_version }}
+          - Health: OK
+          - Progress: {{ ansible_play_hosts.index(inventory_hostname) + 1 }}/{{ ansible_play_hosts | length }}
+
+    rescue:
+    # Rollback procedures for this server
+    - name: Deployment failed - rolling back {{ inventory_hostname }}
+      debug:
+        msg: |
+          ❌ Deployment failed on {{ inventory_hostname }}
+          Failed task: {{ ansible_failed_task.name }}
+          Error: {{ ansible_failed_result.msg | default('Unknown') }}
+          Initiating rollback...
+
+    - name: Stop failed application
+      systemd:
+        name: myapp
+        state: stopped
+      ignore_errors: yes
+
+    - name: Restore from backup
+      unarchive:
+        src: "{{ backup_result.dest }}"
+        dest: /
+        remote_src: yes
+      when: backup_result.dest is defined
+      ignore_errors: yes
+
+    - name: Start rolled-back application
+      systemd:
+        name: myapp
+        state: started
+      register: rollback_start
+      ignore_errors: yes
+
+    - name: Wait for rolled-back app
+      wait_for:
+        port: 8080
+        delay: 5
+        timeout: 60
+      ignore_errors: yes
+
+    - name: Verify rollback health
+      uri:
+        url: "{{ health_check_url }}"
+        status_code: 200
+      register: rollback_health
+      until: rollback_health.status == 200
+      retries: 5
+      delay: 10
+      ignore_errors: yes
+
+    - name: Re-add to load balancer (if healthy)
+      haproxy:
+        state: enabled
+        host: "{{ inventory_hostname }}"
+        socket: /var/run/haproxy.sock
+        backend: web_backend
+      delegate_to: "{{ groups['loadbalancer'][0] }}"
+      when:
+      - groups['loadbalancer'] is defined
+      - rollback_health.status == 200
+      ignore_errors: yes
+
+    - name: Rollback status report
+      debug:
+        msg: |
+          Rollback Status for {{ inventory_hostname }}
+          ==========================================
+          Service Started: {{ 'Yes' if rollback_start is succeeded else 'No' }}
+          Health Check: {{ 'OK' if rollback_health.status == 200 else 'FAILED' }}
+
+          {% if rollback_health.status == 200 %}
+          ✅ Server rolled back successfully
+          {% else %}
+          ❌ Rollback failed - manual intervention needed!
+          {% endif %}
+
+    - name: Save rollback log
+      copy:
+        content: |
+          Deployment Failure & Rollback Report
+          ====================================
+          Server: {{ inventory_hostname }}
+          Time: {{ ansible_date_time.iso8601 }}
+          Target Version: {{ app_version }}
+          Failed Task: {{ ansible_failed_task.name }}
+          Error: {{ ansible_failed_result.msg | default('Unknown') }}
+
+          Rollback Status:
+          - Service: {{ 'Running' if rollback_start is succeeded else 'Stopped' }}
+          - Health: {{ 'OK' if rollback_health.status == 200 else 'FAILED' }}
+          - Version: {{ (current_version.content | b64decode).strip() if current_version.content is defined else 'Unknown' }}
+
+          Backup: {{ backup_result.dest | default('N/A') }}
+        dest: "{{ backup_dir }}/rollback_{{ inventory_hostname }}_{{ timestamp }}.log"
+
+    # This will stop the play from continuing to other servers
+    - name: Stop deployment to remaining servers
+      fail:
+        msg: |
+          Deployment failed on {{ inventory_hostname }}.
+          Rollback status: {{ 'OK' if rollback_health.status == 200 else 'FAILED' }}
+          Stopping deployment to remaining servers.
+          Report: {{ backup_dir }}/rollback_{{ inventory_hostname }}_{{ timestamp }}.log
+
+    always:
+    # Logging and cleanup
+    - name: Record deployment attempt
+      lineinfile:
+        path: "{{ backup_dir }}/rolling_deployment_history.log"
+        line: "{{ ansible_date_time.iso8601 }} | {{ inventory_hostname }} | {{ app_version }} | {{ 'SUCCESS' if ansible_failed_task is not defined else 'FAILED' }}"
+        create: yes
+        mode: '0644'
+
+    - name: Clean up temporary files
+      file:
+        path: "/tmp/myapp-{{ app_version }}.tar.gz"
+        state: absent
+
+    - name: Server deployment summary
+      debug:
+        msg: |
+          Server: {{ inventory_hostname }}
+          Status: {{ 'SUCCESS' if ansible_failed_task is not defined else 'FAILED' }}
+          Time: {{ ansible_date_time.iso8601 }}
+
+# Post-deployment tasks (run once after all servers)
+- name: Post-Deployment Validation
+  hosts: webservers[0]
+  become: yes
+  gather_facts: no
+
+  tasks:
+  - name: Wait for all servers to stabilize
+    pause:
+      seconds: 30
+      prompt: "Waiting for cluster stabilization..."
+
+  - name: Check all servers health
+    uri:
+      url: "http://{{ hostvars[item].ansible_host }}:8080/health"
+      status_code: 200
+      return_content: yes
+    loop: "{{ groups['webservers'] }}"
+    register: all_health_checks
+    ignore_errors: yes
+
+  - name: Deployment summary
+    debug:
+      msg: |
+        ================================================
+        Rolling Deployment Summary
+        ================================================
+        Version: {{ app_version }}
+        Total Servers: {{ groups['webservers'] | length }}
+        Successful: {{ all_health_checks.results | selectattr('status', 'equalto', 200) | list | length }}
+        Failed: {{ all_health_checks.results | rejectattr('status', 'equalto', 200) | list | length }}
+
+        {% if all_health_checks.results | rejectattr('status', 'equalto', 200) | list | length == 0 %}
+        ✅ All servers deployed successfully!
+        {% else %}
+        ⚠️  Some servers failed. Check logs.
+        {% endif %}
+
+  - name: Display deployment history
+    shell: tail -n 10 {{ backup_dir }}/rolling_deployment_history.log
+    register: history
+    changed_when: false
+
+  - name: Recent deployments
+    debug:
+      msg: "{{ history.stdout_lines }}"
+
+# Usage examples:
+#
+# Deploy to all servers (one at a time):
+#   ansible-playbook -i inventory.ini rolling-deployment.yml -e "version=2.1.0"
+#
+# Deploy with custom health check settings:
+#   ansible-playbook -i inventory.ini rolling-deployment.yml \
+#     -e "version=2.1.0 health_check_retries=10 health_check_delay=5"
+#
+# Deploy to specific subset:
+#   ansible-playbook -i inventory.ini rolling-deployment.yml \
+#     -e "version=2.1.0" --limit "web1,web2"
+#
+# Dry run:
+#   ansible-playbook -i inventory.ini rolling-deployment.yml --check
+#
+# Deploy 2 servers at a time instead of 1:
+#   ansible-playbook -i inventory.ini rolling-deployment.yml -e "version=2.1.0" --extra-vars "serial=2"

@@ -1,0 +1,179 @@
+---
+- name: Async with Polling Example
+  hosts: local
+  gather_facts: yes
+
+  vars:
+    work_dir: /tmp/async_polling
+
+  tasks:
+  - name: Create work directory
+    file:
+      path: "{{ work_dir }}"
+      state: directory
+      mode: '0755'
+
+  - name: Long task with polling (check every 10 seconds)
+    shell: |
+      echo "Starting long operation at $(date)"
+      echo "This task will take approximately 45 seconds..."
+
+      for i in {1..45}; do
+        echo "[$i/45] Working..."
+        sleep 1
+      done
+
+      echo "Operation completed at $(date)"
+      echo "Success!"
+    async: 90 # 90 second timeout
+    poll: 10 # Check every 10 seconds
+    register: long_operation
+
+  - name: Display operation results
+    debug:
+      msg: |
+        ✅ Long operation completed successfully!
+
+        Duration: {{ long_operation.delta }}
+        Return Code: {{ long_operation.rc }}
+
+        Last 5 lines of output:
+        {{ long_operation.stdout_lines[-5:] | join('\n') }}
+
+  - name: Database backup simulation with polling
+    shell: |
+      BACKUP_FILE="{{ work_dir }}/db_backup_$(date +%s).sql.gz"
+      echo "Creating database backup: $BACKUP_FILE"
+
+      # Simulate database dump
+      echo "-- Database Dump" > "${BACKUP_FILE%.gz}"
+      echo "-- Started: $(date)" >> "${BACKUP_FILE%.gz}"
+
+      for i in {1..30}; do
+        echo "-- Table $i data..." >> "${BACKUP_FILE%.gz}"
+        sleep 1
+      done
+
+      echo "-- Completed: $(date)" >> "${BACKUP_FILE%.gz}"
+
+      # Compress
+      gzip "${BACKUP_FILE%.gz}"
+
+      echo "Backup completed: $BACKUP_FILE"
+      ls -lh "$BACKUP_FILE"
+    async: 120
+    poll: 15 # Check every 15 seconds
+    register: backup_job
+
+  - name: Show backup results
+    debug:
+      msg: |
+        Database Backup Results
+        ======================
+        Status: {{ 'Success' if backup_job.rc == 0 else 'Failed' }}
+        Duration: {{ backup_job.delta }}
+
+        Output:
+        {{ backup_job.stdout }}
+
+  - name: Large file download with progress monitoring
+    shell: |
+      DEST_FILE="{{ work_dir }}/large_file_$(date +%s).dat"
+      echo "Downloading large file..."
+
+      # Create 500MB file (simulates download)
+      dd if=/dev/zero of="$DEST_FILE" bs=1M count=500 2>&1
+
+      echo "Download completed: $DEST_FILE"
+      ls -lh "$DEST_FILE"
+    async: 180
+    poll: 20 # Check every 20 seconds
+    register: download_job
+
+  - name: Download summary
+    debug:
+      msg: |
+        Download Summary
+        ===============
+        Status: Completed
+        Duration: {{ download_job.delta }}
+        Return Code: {{ download_job.rc }}
+
+  - name: System maintenance with polling
+    shell: |
+      LOG_FILE="{{ work_dir }}/maintenance_$(date +%s).log"
+      echo "System Maintenance Log" > "$LOG_FILE"
+      echo "Started: $(date)" >> "$LOG_FILE"
+      echo "==================" >> "$LOG_FILE"
+
+      echo "Analyzing disk usage..."
+      df -h >> "$LOG_FILE"
+      sleep 5
+
+      echo "Checking memory..."
+      free -h >> "$LOG_FILE"
+      sleep 5
+
+      echo "Finding large files..."
+      find /var/log -type f -size +10M -exec ls -lh {} \; >> "$LOG_FILE" 2>/dev/null || true
+      sleep 10
+
+      echo "Cleaning old logs..."
+      find /var/log -name "*.log" -mtime +30 -type f | wc -l >> "$LOG_FILE"
+      sleep 5
+
+      echo "Completed: $(date)" >> "$LOG_FILE"
+      echo "Maintenance completed. Log: $LOG_FILE"
+      cat "$LOG_FILE"
+    async: 60
+    poll: 10
+    register: maintenance_job
+    become: yes
+
+  - name: Maintenance summary
+    debug:
+      msg: |
+        Maintenance Completed
+        ====================
+        Duration: {{ maintenance_job.delta }}
+        Check {{ work_dir }}/maintenance_*.log for details
+
+  - name: Final summary of all polled tasks
+    debug:
+      msg: |
+        ================================================
+        All Async Tasks with Polling Completed
+        ================================================
+
+        Task 1: Long Operation
+          Duration: {{ long_operation.delta }}
+          Status: {{ 'Success' if long_operation.rc == 0 else 'Failed' }}
+
+        Task 2: Database Backup
+          Duration: {{ backup_job.delta }}
+          Status: {{ 'Success' if backup_job.rc == 0 else 'Failed' }}
+
+        Task 3: Large Download
+          Duration: {{ download_job.delta }}
+          Status: {{ 'Success' if download_job.rc == 0 else 'Failed' }}
+
+        Task 4: System Maintenance
+          Duration: {{ maintenance_job.delta }}
+          Status: {{ 'Success' if maintenance_job.rc == 0 else 'Failed' }}
+
+        Total time saved vs sequential: ~30 seconds
+        (Due to parallel initialization and smart polling)
+
+# Usage:
+#
+# Run with default polling intervals:
+#   ansible-playbook -i inventory.ini polling-example.yml
+#
+# Run with verbose output to see polling in action:
+#   ansible-playbook -i inventory.ini polling-example.yml -v
+#
+# View generated files:
+#   ls -lh /tmp/async_polling/
+#
+# Clean up:
+#   rm -rf /tmp/async_polling/

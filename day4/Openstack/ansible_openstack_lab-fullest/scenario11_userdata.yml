@@ -97,6 +97,33 @@
       state: present
     register: volume_result
 
+  - name: Wait for volume to be ready
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ volume_name }}"
+    register: userdata_volume_info
+    until:
+    - userdata_volume_info.volumes | length > 0
+    - userdata_volume_info.volumes[0].status in ['available', 'in-use', 'error']
+    retries: 30
+    delay: 5
+    failed_when: userdata_volume_info.volumes[0].status == 'error'
+
+  - name: Ensure bootable flag is set on volume
+    command: "openstack volume set --bootable {{ volume_name }}"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+
+  - name: Show volume readiness details
+    debug:
+      msg: |
+        Volume ready:
+          Name: {{ userdata_volume_info.volumes[0].name }}
+          ID: {{ userdata_volume_info.volumes[0].id }}
+          Status: {{ userdata_volume_info.volumes[0].status }}
+          Bootable: {{ userdata_volume_info.volumes[0].is_bootable }}
+
   - name: Launch instance with user_data
     openstack.cloud.server:
       cloud: "{{ cloud_name }}"

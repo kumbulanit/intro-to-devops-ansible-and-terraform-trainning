@@ -1,0 +1,686 @@
+---
+#=============================================================================
+# Playbook: Install Complete Application Stack on Single OpenStack Instance
+#=============================================================================
+# Description: Installs PostgreSQL, Nginx, PHP, and HAProxy on the same
+#              OpenStack instance where AWX is installed
+#
+# Prerequisites:
+#   - Existing OpenStack instance with AWX installed
+#   - SSH access configured in inventory.ini
+#   - Sudo privileges on the target server
+#
+# Usage:
+#   ansible-playbook 09-install-all-apps-on-single-instance.yml -i inventory.ini
+#
+# What this playbook does:
+#   1. Installs PostgreSQL database
+#   2. Installs Nginx web server with PHP
+#   3. Deploys sample web application
+#   4. Installs HAProxy load balancer
+#   5. Configures all services to work together
+#
+# Access after installation:
+#   - AWX: http://YOUR_IP:8080
+#   - Web App: http://YOUR_IP (port 80)
+#   - HAProxy Stats: http://YOUR_IP:8404/stats
+#   - Direct Web Access: http://YOUR_IP:8081
+#
+# Architecture on Single Instance:
+#   - AWX: Port 8080 (Docker containers)
+#   - PostgreSQL: Port 5432 (system service)
+#   - Nginx/PHP: Port 8081 (system service)
+#   - HAProxy: Port 80 (frontend) -> Port 8081 (backend)
+#   - HAProxy Stats: Port 8404
+#
+#=============================================================================
+
+- name: Install Complete Application Stack on Single Instance
+  hosts: openstack_instance
+  become: yes
+  gather_facts: yes
+
+  vars:
+    # Database configuration
+    db_name: "{{ db_name | default('webapp_db') }}"
+    db_user: "{{ db_user | default('webapp_user') }}"
+    db_password: "{{ db_password | default('WebAppDBPass123!') }}"
+    db_port: 5432
+    
+    # Web application configuration
+    app_name: "{{ app_name | default('webapp') }}"
+    app_port: 8081  # Changed from 80 to avoid conflict with HAProxy
+    app_dir: "{{ app_dir | default('/var/www/webapp') }}"
+    
+    # HAProxy configuration
+    lb_frontend_port: 80
+    lb_backend_port: 8081
+    haproxy_stats_port: 8404
+    haproxy_stats_user: "{{ haproxy_stats_user | default('admin') }}"
+    haproxy_stats_password: "{{ haproxy_stats_password | default('HAProxyStatsPassword123!') }}"
+
+  pre_tasks:
+    - name: Display installation plan
+      debug:
+        msg:
+          - "=========================================="
+          - "Installing Complete Application Stack"
+          - "=========================================="
+          - "Target: {{ inventory_hostname }} ({{ ansible_host }})"
+          - ""
+          - "Components to install:"
+          - "  1. PostgreSQL Database (port {{ db_port }})"
+          - "  2. Nginx Web Server (port {{ app_port }})"
+          - "  3. PHP Application"
+          - "  4. HAProxy Load Balancer (port {{ lb_frontend_port }})"
+          - ""
+          - "Access URLs after installation:"
+          - "  - AWX: http://{{ ansible_host }}:8080"
+          - "  - Application: http://{{ ansible_host }}"
+          - "  - HAProxy Stats: http://{{ ansible_host }}:{{ haproxy_stats_port }}/stats"
+          - "=========================================="
+
+  tasks:
+    #=========================================================================
+    # SECTION 1: Install PostgreSQL Database
+    #=========================================================================
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install PostgreSQL and dependencies
+      apt:
+        name:
+          - postgresql
+          - postgresql-contrib
+          - python3-psycopg2
+          - libpq-dev
+        state: present
+
+    - name: Ensure PostgreSQL is started and enabled
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: Create application database
+      postgresql_db:
+        name: "{{ db_name }}"
+        state: present
+      become_user: postgres
+
+    - name: Create application database user
+      postgresql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        db: "{{ db_name }}"
+        priv: ALL
+        state: present
+      become_user: postgres
+
+    - name: Grant all privileges to database user
+      postgresql_privs:
+        db: "{{ db_name }}"
+        role: "{{ db_user }}"
+        objs: ALL_IN_SCHEMA
+        privs: ALL
+        type: table
+      become_user: postgres
+
+    - name: Configure PostgreSQL to listen on all interfaces
+      lineinfile:
+        path: /etc/postgresql/{{ item }}/main/postgresql.conf
+        regexp: '^#?listen_addresses\s*='
+        line: "listen_addresses = '*'"
+      with_items:
+        - 14
+        - 12
+        - 10
+      ignore_errors: yes
+      notify: restart postgresql
+
+    - name: Configure PostgreSQL authentication for local connections
+      lineinfile:
+        path: /etc/postgresql/{{ item }}/main/pg_hba.conf
+        line: "host    {{ db_name }}    {{ db_user }}    127.0.0.1/32    md5"
+        insertafter: EOF
+      with_items:
+        - 14
+        - 12
+        - 10
+      ignore_errors: yes
+      notify: restart postgresql
+
+    - name: Create sample database schema
+      postgresql_query:
+        db: "{{ db_name }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        login_host: localhost
+        query: |
+          CREATE TABLE IF NOT EXISTS visits (
+            id SERIAL PRIMARY KEY,
+            server_name VARCHAR(255),
+            visit_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ip_address VARCHAR(45)
+          );
+
+    #=========================================================================
+    # SECTION 2: Install Nginx and PHP
+    #=========================================================================
+    - name: Install Nginx and PHP packages
+      apt:
+        name:
+          - nginx
+          - php-fpm
+          - php-pgsql
+          - php-cli
+          - php-common
+          - php-curl
+          - php-mbstring
+          - php-xml
+        state: present
+
+    - name: Find PHP-FPM version
+      shell: "ls /etc/php/ | grep -E '^[0-9]+\\.[0-9]+$' | sort -V | tail -n1"
+      register: php_version
+      changed_when: false
+
+    - name: Create web application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Deploy PHP application
+      copy:
+        dest: "{{ app_dir }}/index.php"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+        content: |
+          <?php
+          // Database connection configuration
+          $db_host = '127.0.0.1';
+          $db_name = '{{ db_name }}';
+          $db_user = '{{ db_user }}';
+          $db_password = '{{ db_password }}';
+          $db_port = {{ db_port }};
+
+          // Get server information
+          $server_name = gethostname();
+          $server_ip = $_SERVER['SERVER_ADDR'] ?? 'Unknown';
+          $client_ip = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+
+          // Connect to database
+          $db_status = "Not Connected";
+          $visit_count = 0;
+          
+          try {
+              $dsn = "pgsql:host=$db_host;port=$db_port;dbname=$db_name";
+              $pdo = new PDO($dsn, $db_user, $db_password);
+              $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+              $db_status = "Connected";
+              
+              // Log this visit
+              $stmt = $pdo->prepare("INSERT INTO visits (server_name, ip_address) VALUES (?, ?)");
+              $stmt->execute([$server_name, $client_ip]);
+              
+              // Get total visit count
+              $stmt = $pdo->query("SELECT COUNT(*) as count FROM visits");
+              $visit_count = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
+              
+          } catch (PDOException $e) {
+              $db_status = "Error: " . $e->getMessage();
+          }
+          ?>
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Three-Tier Application - Single Instance</title>
+              <style>
+                  body {
+                      font-family: Arial, sans-serif;
+                      max-width: 800px;
+                      margin: 50px auto;
+                      padding: 20px;
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      color: white;
+                  }
+                  .container {
+                      background: rgba(255, 255, 255, 0.1);
+                      border-radius: 15px;
+                      padding: 30px;
+                      backdrop-filter: blur(10px);
+                      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+                  }
+                  h1 {
+                      text-align: center;
+                      margin-bottom: 30px;
+                      font-size: 2.5em;
+                  }
+                  .info-box {
+                      background: rgba(255, 255, 255, 0.2);
+                      padding: 20px;
+                      margin: 15px 0;
+                      border-radius: 10px;
+                      border-left: 5px solid #ffd700;
+                  }
+                  .info-box h2 {
+                      margin-top: 0;
+                      color: #ffd700;
+                  }
+                  .status {
+                      display: inline-block;
+                      padding: 5px 15px;
+                      border-radius: 20px;
+                      font-weight: bold;
+                  }
+                  .status.success { background: #10b981; }
+                  .status.error { background: #ef4444; }
+                  .footer {
+                      text-align: center;
+                      margin-top: 30px;
+                      padding-top: 20px;
+                      border-top: 1px solid rgba(255, 255, 255, 0.3);
+                      font-size: 0.9em;
+                  }
+                  .links {
+                      display: flex;
+                      justify-content: space-around;
+                      margin-top: 20px;
+                  }
+                  .links a {
+                      color: #ffd700;
+                      text-decoration: none;
+                      font-weight: bold;
+                      padding: 10px 20px;
+                      background: rgba(255, 255, 255, 0.1);
+                      border-radius: 5px;
+                      transition: all 0.3s;
+                  }
+                  .links a:hover {
+                      background: rgba(255, 255, 255, 0.3);
+                      transform: translateY(-2px);
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🚀 Three-Tier Application</h1>
+                  <p style="text-align: center; font-size: 1.2em;">
+                      All components running on a single OpenStack instance
+                  </p>
+
+                  <div class="info-box">
+                      <h2>⚡ Load Balancer (HAProxy)</h2>
+                      <p><strong>Status:</strong> <span class="status success">Active</span></p>
+                      <p><strong>Frontend:</strong> Port 80</p>
+                      <p><strong>Backend:</strong> Port {{ app_port }}</p>
+                  </div>
+
+                  <div class="info-box">
+                      <h2>🌐 Web Server (Nginx + PHP)</h2>
+                      <p><strong>Server Name:</strong> <?php echo $server_name; ?></p>
+                      <p><strong>Server IP:</strong> <?php echo $server_ip; ?></p>
+                      <p><strong>Your IP:</strong> <?php echo $client_ip; ?></p>
+                      <p><strong>PHP Version:</strong> <?php echo PHP_VERSION; ?></p>
+                  </div>
+
+                  <div class="info-box">
+                      <h2>🗄️ Database (PostgreSQL)</h2>
+                      <p><strong>Status:</strong> 
+                          <span class="status <?php echo strpos($db_status, 'Connected') !== false ? 'success' : 'error'; ?>">
+                              <?php echo $db_status; ?>
+                          </span>
+                      </p>
+                      <p><strong>Database:</strong> {{ db_name }}</p>
+                      <p><strong>Total Visits:</strong> <?php echo $visit_count; ?></p>
+                      <p><strong>Port:</strong> {{ db_port }}</p>
+                  </div>
+
+                  <div class="links">
+                      <a href="http://<?php echo $_SERVER['HTTP_HOST']; ?>:8080" target="_blank">
+                          📊 AWX Dashboard
+                      </a>
+                      <a href="http://<?php echo $_SERVER['HTTP_HOST']; ?>:8404/stats" target="_blank">
+                          📈 HAProxy Statistics
+                      </a>
+                      <a href="javascript:location.reload();">
+                          🔄 Refresh Page
+                      </a>
+                  </div>
+
+                  <div class="footer">
+                      <p>🎯 Ansible Day 5 Training - Single Instance Deployment</p>
+                      <p>Timestamp: <?php echo date('Y-m-d H:i:s'); ?></p>
+                  </div>
+              </div>
+          </body>
+          </html>
+
+    - name: Create health check endpoint
+      copy:
+        dest: "{{ app_dir }}/health"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+        content: |
+          <?php
+          http_response_code(200);
+          echo json_encode([
+              'status' => 'healthy',
+              'server' => gethostname(),
+              'timestamp' => date('c')
+          ]);
+
+    - name: Configure Nginx site for the application
+      copy:
+        dest: /etc/nginx/sites-available/webapp
+        content: |
+          server {
+              listen {{ app_port }} default_server;
+              listen [::]:{{ app_port }} default_server;
+
+              root {{ app_dir }};
+              index index.php index.html;
+
+              server_name _;
+
+              location / {
+                  try_files $uri $uri/ =404;
+              }
+
+              location ~ \.php$ {
+                  include snippets/fastcgi-php.conf;
+                  fastcgi_pass unix:/var/run/php/php{{ php_version.stdout }}-fpm.sock;
+              }
+
+              location ~ /\.ht {
+                  deny all;
+              }
+
+              # Health check endpoint
+              location = /health {
+                  access_log off;
+                  try_files $uri $uri/ /health.php;
+              }
+          }
+
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Enable webapp site
+      file:
+        src: /etc/nginx/sites-available/webapp
+        dest: /etc/nginx/sites-enabled/webapp
+        state: link
+      notify: restart nginx
+
+    - name: Test Nginx configuration
+      command: nginx -t
+      changed_when: false
+
+    #=========================================================================
+    # SECTION 3: Install and Configure HAProxy
+    #=========================================================================
+    - name: Install HAProxy
+      apt:
+        name: haproxy
+        state: present
+
+    - name: Configure HAProxy
+      copy:
+        dest: /etc/haproxy/haproxy.cfg
+        content: |
+          global
+              log /dev/log local0
+              log /dev/log local1 notice
+              chroot /var/lib/haproxy
+              stats socket /run/haproxy/admin.sock mode 660 level admin
+              stats timeout 30s
+              user haproxy
+              group haproxy
+              daemon
+
+          defaults
+              log     global
+              mode    http
+              option  httplog
+              option  dontlognull
+              timeout connect 5000
+              timeout client  50000
+              timeout server  50000
+
+          # Statistics page
+          listen stats
+              bind *:{{ haproxy_stats_port }}
+              mode http
+              stats enable
+              stats uri /stats
+              stats refresh 10s
+              stats auth {{ haproxy_stats_user }}:{{ haproxy_stats_password }}
+              stats admin if TRUE
+
+          # Frontend - accepts requests from clients
+          frontend web_frontend
+              bind *:{{ lb_frontend_port }}
+              mode http
+              default_backend web_backend
+
+          # Backend - forward requests to web servers
+          backend web_backend
+              mode http
+              balance roundrobin
+              option httpchk GET /health
+              http-check expect status 200
+              
+              # Since we're on single instance, point to localhost
+              server web1 127.0.0.1:{{ lb_backend_port }} check inter 3000 rise 2 fall 3
+      notify: restart haproxy
+
+    - name: Enable HAProxy service
+      systemd:
+        name: haproxy
+        enabled: yes
+        state: started
+
+    #=========================================================================
+    # SECTION 4: Update Firewall Rules
+    #=========================================================================
+    - name: Update UFW rules for all services
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "22"      # SSH
+        - "80"      # HAProxy frontend
+        - "8080"    # AWX
+        - "8081"    # Nginx (direct access)
+        - "8404"    # HAProxy stats
+        - "5432"    # PostgreSQL (if needed)
+
+    - name: Reload UFW
+      ufw:
+        state: reloaded
+
+  handlers:
+    - name: restart postgresql
+      systemd:
+        name: postgresql
+        state: restarted
+
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+
+    - name: restart haproxy
+      systemd:
+        name: haproxy
+        state: restarted
+
+  post_tasks:
+    - name: Wait for Nginx to be ready
+      wait_for:
+        host: 127.0.0.1
+        port: "{{ app_port }}"
+        timeout: 30
+
+    - name: Wait for HAProxy to be ready
+      wait_for:
+        host: 127.0.0.1
+        port: "{{ lb_frontend_port }}"
+        timeout: 30
+
+    - name: Test application health endpoint
+      uri:
+        url: "http://127.0.0.1:{{ app_port }}/health"
+        method: GET
+        status_code: 200
+      register: health_check
+      ignore_errors: yes
+
+    - name: Test database connectivity
+      postgresql_query:
+        db: "{{ db_name }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        login_host: localhost
+        query: "SELECT COUNT(*) as count FROM visits"
+      register: db_test
+      ignore_errors: yes
+
+    - name: Get service status
+      command: "systemctl is-active {{ item }}"
+      loop:
+        - postgresql
+        - nginx
+        - haproxy
+      register: service_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display installation summary
+      debug:
+        msg:
+          - "=========================================="
+          - "Installation Completed Successfully!"
+          - "=========================================="
+          - ""
+          - "🎯 All Services Installed on Single Instance:"
+          - "  Server: {{ ansible_host }}"
+          - ""
+          - "📊 Service Status:"
+          - "  PostgreSQL: {{ service_status.results[0].stdout }}"
+          - "  Nginx:      {{ service_status.results[1].stdout }}"
+          - "  HAProxy:    {{ service_status.results[2].stdout }}"
+          - ""
+          - "🌐 Access URLs:"
+          - "  AWX Dashboard:    http://{{ ansible_host }}:8080"
+          - "  Web Application:  http://{{ ansible_host }}"
+          - "  HAProxy Stats:    http://{{ ansible_host }}:8404/stats"
+          - "  Direct Web:       http://{{ ansible_host }}:8081"
+          - ""
+          - "🔐 Credentials:"
+          - "  HAProxy Stats:"
+          - "    Username: {{ haproxy_stats_user }}"
+          - "    Password: {{ haproxy_stats_password }}"
+          - ""
+          - "  Database:"
+          - "    Database: {{ db_name }}"
+          - "    Username: {{ db_user }}"
+          - "    Password: {{ db_password }}"
+          - ""
+          - "🔧 Service Management:"
+          - "  sudo systemctl status postgresql"
+          - "  sudo systemctl status nginx"
+          - "  sudo systemctl status haproxy"
+          - ""
+          - "📝 Log Files:"
+          - "  Nginx:      /var/log/nginx/error.log"
+          - "  HAProxy:    journalctl -u haproxy"
+          - "  PostgreSQL: /var/log/postgresql/"
+          - "=========================================="
+
+    - name: Save access information
+      copy:
+        dest: "./complete-stack-access-info.txt"
+        content: |
+          Complete Application Stack - Access Information
+          ================================================
+          
+          Installation Date: {{ ansible_date_time.iso8601 }}
+          Server: {{ inventory_hostname }} ({{ ansible_host }})
+          
+          SERVICE ACCESS URLS:
+          ====================
+          AWX Dashboard:        http://{{ ansible_host }}:8080
+          Web Application:      http://{{ ansible_host }}
+          HAProxy Statistics:   http://{{ ansible_host }}:8404/stats
+          Direct Web Access:    http://{{ ansible_host }}:8081
+          
+          CREDENTIALS:
+          ============
+          HAProxy Stats:
+            Username: {{ haproxy_stats_user }}
+            Password: {{ haproxy_stats_password }}
+          
+          Database:
+            Host:     127.0.0.1
+            Port:     {{ db_port }}
+            Database: {{ db_name }}
+            Username: {{ db_user }}
+            Password: {{ db_password }}
+          
+          SERVICE COMMANDS:
+          =================
+          Check status:
+            sudo systemctl status postgresql
+            sudo systemctl status nginx
+            sudo systemctl status haproxy
+          
+          Restart services:
+            sudo systemctl restart postgresql
+            sudo systemctl restart nginx
+            sudo systemctl restart haproxy
+          
+          View logs:
+            sudo tail -f /var/log/nginx/error.log
+            sudo journalctl -u haproxy -f
+            sudo tail -f /var/log/postgresql/postgresql-*-main.log
+          
+          ARCHITECTURE:
+          =============
+          Single OpenStack Instance running:
+            - HAProxy (Load Balancer) on port 80
+            - Nginx (Web Server) on port 8081
+            - PHP-FPM (Application) 
+            - PostgreSQL (Database) on port 5432
+            - AWX (Ansible Tower) on port 8080
+          
+          Traffic Flow:
+            Client -> HAProxy (80) -> Nginx (8081) -> PHP -> PostgreSQL (5432)
+          
+          ================================================
+      delegate_to: localhost
+      become: no
+
+    - name: Final message
+      debug:
+        msg:
+          - ""
+          - "✅ All applications installed successfully!"
+          - ""
+          - "🌐 Open your browser to: http://{{ ansible_host }}"
+          - ""
+          - "📄 Access info saved to: ./complete-stack-access-info.txt"
+          - ""

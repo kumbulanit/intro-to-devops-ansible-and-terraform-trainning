@@ -1,0 +1,383 @@
+---
+# =============================================================================
+# AWX Installation on Local Ubuntu/Debian Using Docker Compose
+# =============================================================================
+# Description: This playbook installs AWX on a local Ubuntu/Debian machine
+#              using Docker Compose (simplified method, no Kubernetes needed)
+# 
+# Prerequisites:
+#   - Ubuntu 20.04/22.04 or Debian 11+
+#   - Sudo access
+#   - Internet connection
+#   - Minimum 4GB RAM, 2 CPU cores, 20GB disk
+#
+# Usage:
+#   ansible-playbook 01-install-awx-local-docker-compose.yml
+#
+# Access AWX:
+#   URL: http://localhost:8080
+#   Username: admin
+#   Password: (see awx_admin_password variable)
+# =============================================================================
+
+- name: Install AWX on Local Machine Using Docker Compose
+  hosts: localhost
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    awx_version: "23.5.0"
+    awx_admin_password: "AWXAdminPassword123!"
+    awx_install_dir: /opt/awx
+    postgres_password: "PostgresSecurePass123!"
+    
+  tasks:
+    # =========================================================================
+    # PHASE 1: System Preparation
+    # =========================================================================
+    
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - python3-pip
+          - git
+          - vim
+        state: present
+      when: ansible_os_family == "Debian"
+
+    # =========================================================================
+    # PHASE 2: Docker Installation
+    # =========================================================================
+
+    - name: Remove old Docker versions
+      apt:
+        name:
+          - docker
+          - docker-engine
+          - docker.io
+          - containerd
+          - runc
+        state: absent
+      when: ansible_os_family == "Debian"
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install docker-compose standalone
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add current user to docker group
+      user:
+        name: "{{ ansible_env.SUDO_USER | default(ansible_user_id) }}"
+        groups: docker
+        append: yes
+
+    # =========================================================================
+    # PHASE 3: AWX Installation
+    # =========================================================================
+
+    - name: Create AWX installation directory
+      file:
+        path: "{{ awx_install_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create docker-compose.yml for AWX
+      copy:
+        dest: "{{ awx_install_dir }}/docker-compose.yml"
+        mode: '0644'
+        content: |
+          version: '3.8'
+          
+          services:
+            postgres:
+              image: postgres:13
+              container_name: awx-postgres
+              hostname: postgres
+              environment:
+                POSTGRES_DB: awx
+                POSTGRES_USER: awx
+                POSTGRES_PASSWORD: {{ postgres_password }}
+                PGDATA: /var/lib/postgresql/data/pgdata
+              volumes:
+                - postgres-data:/var/lib/postgresql/data/pgdata
+              networks:
+                - awx-network
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U awx"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+          
+            redis:
+              image: redis:7
+              container_name: awx-redis
+              hostname: redis
+              networks:
+                - awx-network
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "redis-cli", "ping"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+          
+            awx-web:
+              image: quay.io/ansible/awx:{{ awx_version }}
+              container_name: awx-web
+              hostname: awx-web
+              user: root
+              environment:
+                DATABASE_HOST: postgres
+                DATABASE_PORT: 5432
+                DATABASE_NAME: awx
+                DATABASE_USER: awx
+                DATABASE_PASSWORD: {{ postgres_password }}
+                REDIS_HOST: redis
+                REDIS_PORT: 6379
+                AWX_ADMIN_USER: admin
+                AWX_ADMIN_PASSWORD: {{ awx_admin_password }}
+              volumes:
+                - awx-projects:/var/lib/awx/projects
+                - awx-rsyslog:/var/lib/awx/rsyslog
+              ports:
+                - "8080:8052"
+              networks:
+                - awx-network
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                redis:
+                  condition: service_healthy
+              command: >
+                bash -c "
+                awx-manage migrate --noinput &&
+                awx-manage create_preload_data &&
+                awx-manage provision_instance --hostname=awx-web &&
+                awx-manage register_queue --queuename=default --hostnames=awx-web &&
+                supervisord -c /etc/supervisord.conf
+                "
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:8052/api/v2/ping/"]
+                interval: 30s
+                timeout: 10s
+                retries: 10
+                start_period: 120s
+          
+            awx-task:
+              image: quay.io/ansible/awx:{{ awx_version }}
+              container_name: awx-task
+              hostname: awx-task
+              user: root
+              environment:
+                DATABASE_HOST: postgres
+                DATABASE_PORT: 5432
+                DATABASE_NAME: awx
+                DATABASE_USER: awx
+                DATABASE_PASSWORD: {{ postgres_password }}
+                REDIS_HOST: redis
+                REDIS_PORT: 6379
+              volumes:
+                - awx-projects:/var/lib/awx/projects
+                - awx-rsyslog:/var/lib/awx/rsyslog
+              networks:
+                - awx-network
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                redis:
+                  condition: service_healthy
+                awx-web:
+                  condition: service_started
+              command: >
+                bash -c "
+                awx-manage provision_instance --hostname=awx-task &&
+                awx-manage register_queue --queuename=default --hostnames=awx-task &&
+                supervisord -c /etc/supervisord.conf
+                "
+              restart: unless-stopped
+          
+          volumes:
+            postgres-data:
+            awx-projects:
+            awx-rsyslog:
+          
+          networks:
+            awx-network:
+              driver: bridge
+
+    - name: Create .env file for AWX
+      copy:
+        dest: "{{ awx_install_dir }}/.env"
+        mode: '0600'
+        content: |
+          AWX_VERSION={{ awx_version }}
+          AWX_ADMIN_PASSWORD={{ awx_admin_password }}
+          POSTGRES_PASSWORD={{ postgres_password }}
+
+    # =========================================================================
+    # PHASE 4: Start AWX Services
+    # =========================================================================
+
+    - name: Pull Docker images
+      command: docker-compose pull
+      args:
+        chdir: "{{ awx_install_dir }}"
+      environment:
+        DOCKER_CLIENT_TIMEOUT: "300"
+        COMPOSE_HTTP_TIMEOUT: "300"
+
+    - name: Start AWX containers
+      command: docker-compose up -d
+      args:
+        chdir: "{{ awx_install_dir }}"
+      environment:
+        DOCKER_CLIENT_TIMEOUT: "300"
+        COMPOSE_HTTP_TIMEOUT: "300"
+
+    - name: Wait for AWX to be ready (this may take 5-10 minutes)
+      uri:
+        url: "http://localhost:8080/api/v2/ping/"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 60
+      delay: 10
+      ignore_errors: yes
+
+    # =========================================================================
+    # PHASE 5: Post-Installation
+    # =========================================================================
+
+    - name: Save AWX access information
+      copy:
+        dest: "{{ awx_install_dir }}/AWX_ACCESS_INFO.txt"
+        mode: '0600'
+        content: |
+          =====================================
+          AWX Installation Complete!
+          =====================================
+          
+          Access Information:
+          -------------------
+          URL: http://localhost:8080
+          Username: admin
+          Password: {{ awx_admin_password }}
+          
+          Installation Directory: {{ awx_install_dir }}
+          
+          Management Commands:
+          --------------------
+          # View running containers
+          docker ps
+          
+          # View AWX logs
+          docker logs -f awx-web
+          docker logs -f awx-task
+          
+          # Restart AWX
+          cd {{ awx_install_dir }} && docker-compose restart
+          
+          # Stop AWX
+          cd {{ awx_install_dir }} && docker-compose down
+          
+          # Start AWX
+          cd {{ awx_install_dir }} && docker-compose up -d
+          
+          # Check AWX status
+          curl http://localhost:8080/api/v2/ping/
+          
+          Container Information:
+          ----------------------
+          - awx-web: Main web interface
+          - awx-task: Background task processor
+          - awx-postgres: PostgreSQL database
+          - awx-redis: Redis cache
+          
+          Data Volumes:
+          -------------
+          - postgres-data: Database files
+          - awx-projects: Ansible project files
+          - awx-rsyslog: Log files
+          
+          Troubleshooting:
+          ----------------
+          # Check container status
+          docker ps -a
+          
+          # View all logs
+          cd {{ awx_install_dir }} && docker-compose logs
+          
+          # Reset AWX (WARNING: Deletes all data)
+          cd {{ awx_install_dir }} && docker-compose down -v
+          cd {{ awx_install_dir }} && docker-compose up -d
+          
+          =====================================
+
+    - name: Display installation summary
+      debug:
+        msg: |
+          ========================================
+          AWX Installation Complete!
+          ========================================
+          
+          Access AWX at: http://localhost:8080
+          Username: admin
+          Password: {{ awx_admin_password }}
+          
+          Access info saved to: {{ awx_install_dir }}/AWX_ACCESS_INFO.txt
+          
+          Note: If AWX is not yet accessible, wait a few more minutes
+          for all services to fully initialize.
+          
+          Check status with: docker ps
+          View logs with: docker logs -f awx-web
+          ========================================
+
+  handlers:
+    - name: restart docker
+      systemd:
+        name: docker
+        state: restarted

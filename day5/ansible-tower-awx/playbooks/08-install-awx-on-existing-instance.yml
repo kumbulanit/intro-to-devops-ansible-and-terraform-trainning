@@ -1,0 +1,430 @@
+---
+#=============================================================================
+# Playbook: Install AWX on Existing OpenStack Instance
+#=============================================================================
+# Description: Installs AWX (Ansible Tower open-source) on your existing
+#              OpenStack instance using Docker Compose method
+#
+# Prerequisites:
+#   - Existing OpenStack instance running Ubuntu 20.04/22.04
+#   - SSH access configured in inventory.ini
+#   - Sudo privileges on the target server
+#   - At least 4GB RAM, 2 CPUs, 10GB disk space
+#
+# Usage:
+#   ansible-playbook 08-install-awx-on-existing-instance.yml -i inventory.ini
+#
+# What this playbook does:
+#   1. Updates system packages
+#   2. Installs Docker and Docker Compose
+#   3. Downloads and configures AWX
+#   4. Starts AWX services
+#   5. Configures firewall (UFW)
+#   6. Creates management scripts
+#
+# Access after installation:
+#   URL: http://YOUR_OPENSTACK_IP:8080
+#   Username: admin
+#   Password: (from inventory.ini awx_admin_password)
+#
+#=============================================================================
+
+- name: Install AWX on Existing OpenStack Instance
+  hosts: awx_servers
+  become: yes
+  gather_facts: yes
+
+  vars:
+    awx_version: "{{ awx_version | default('24.3.1') }}"
+    awx_admin_user: "{{ awx_admin_user | default('admin') }}"
+    awx_admin_password: "{{ awx_admin_password | default('AWXAdminPassword123!') }}"
+    awx_install_dir: "{{ awx_install_dir | default('/opt/awx') }}"
+    postgres_password: "{{ postgres_password | default('AWXPostgresPass123!') }}"
+    awx_host_port: 8080
+    docker_compose_version: "2.20.2"
+
+  pre_tasks:
+    - name: Display installation information
+      debug:
+        msg:
+          - "=========================================="
+          - "Installing AWX on Existing OpenStack Instance"
+          - "=========================================="
+          - "Target Host: {{ inventory_hostname }}"
+          - "AWX Version: {{ awx_version }}"
+          - "Install Directory: {{ awx_install_dir }}"
+          - "Access Port: {{ awx_host_port }}"
+          - "Admin User: {{ awx_admin_user }}"
+          - "=========================================="
+
+    - name: Check system requirements
+      assert:
+        that:
+          - ansible_memtotal_mb >= 3500
+          - ansible_processor_vcpus >= 2
+        fail_msg: "System does not meet minimum requirements (4GB RAM, 2 CPUs)"
+        success_msg: "System requirements check passed"
+
+    - name: Check disk space
+      shell: df -BG {{ awx_install_dir | dirname }} | awk 'NR==2 {print $4}' | sed 's/G//'
+      register: disk_space
+      changed_when: false
+
+    - name: Verify sufficient disk space
+      assert:
+        that: disk_space.stdout | int >= 10
+        fail_msg: "Insufficient disk space. Need at least 10GB available"
+        success_msg: "Disk space check passed ({{ disk_space.stdout }}GB available)"
+
+  tasks:
+    #=========================================================================
+    # SECTION 1: System Preparation
+    #=========================================================================
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required system packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+          - python3
+          - python3-pip
+          - git
+          - pwgen
+          - ufw
+        state: present
+
+    #=========================================================================
+    # SECTION 2: Docker Installation
+    #=========================================================================
+    - name: Create directory for Docker GPG key
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Docker GPG key
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Add Docker repository
+      shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Update apt cache after adding Docker repo
+      apt:
+        update_cache: yes
+
+    - name: Install Docker packages
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ansible user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Install Docker Compose standalone (for compatibility)
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-{{ ansible_architecture }}"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Display Docker version
+      debug:
+        msg: "Docker installed: {{ docker_version.stdout }}"
+
+    #=========================================================================
+    # SECTION 3: Install Python Dependencies
+    #=========================================================================
+    - name: Install Python Docker library
+      pip:
+        name:
+          - docker
+          - docker-compose
+        state: present
+        executable: pip3
+
+    #=========================================================================
+    # SECTION 4: Download and Configure AWX
+    #=========================================================================
+    - name: Create AWX installation directory
+      file:
+        path: "{{ awx_install_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Check if AWX is already downloaded
+      stat:
+        path: "{{ awx_install_dir }}/docker-compose.yml"
+      register: awx_downloaded
+
+    - name: Clone AWX repository
+      git:
+        repo: https://github.com/ansible/awx.git
+        dest: "{{ awx_install_dir }}/awx-repo"
+        version: "{{ awx_version }}"
+        depth: 1
+      when: not awx_downloaded.stat.exists
+
+    - name: Copy docker-compose file to install directory
+      copy:
+        src: "{{ awx_install_dir }}/awx-repo/tools/docker-compose/docker-compose.yml"
+        dest: "{{ awx_install_dir }}/docker-compose.yml"
+        remote_src: yes
+      when: not awx_downloaded.stat.exists
+
+    - name: Copy Ansible inventory file
+      copy:
+        src: "{{ awx_install_dir }}/awx-repo/tools/docker-compose/inventory"
+        dest: "{{ awx_install_dir }}/inventory"
+        remote_src: yes
+      when: not awx_downloaded.stat.exists
+
+    - name: Create .env file for AWX
+      copy:
+        dest: "{{ awx_install_dir }}/.env"
+        content: |
+          # AWX Configuration
+          POSTGRES_PASSWORD={{ postgres_password }}
+          BROADCAST_WEBSOCKET_SECRET={{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}
+          SECRET_KEY={{ lookup('password', '/dev/null length=50 chars=ascii_letters,digits') }}
+          AWX_ADMIN_USER={{ awx_admin_user }}
+          AWX_ADMIN_PASSWORD={{ awx_admin_password }}
+
+    - name: Update docker-compose.yml with correct ports
+      lineinfile:
+        path: "{{ awx_install_dir }}/docker-compose.yml"
+        regexp: '^\s+- "80:8080"'
+        line: '      - "{{ awx_host_port }}:8080"'
+
+    #=========================================================================
+    # SECTION 5: Start AWX Services
+    #=========================================================================
+    - name: Pull Docker images
+      shell: docker-compose pull
+      args:
+        chdir: "{{ awx_install_dir }}"
+
+    - name: Start AWX with docker-compose
+      shell: docker-compose up -d
+      args:
+        chdir: "{{ awx_install_dir }}"
+      environment:
+        POSTGRES_PASSWORD: "{{ postgres_password }}"
+        AWX_ADMIN_USER: "{{ awx_admin_user }}"
+        AWX_ADMIN_PASSWORD: "{{ awx_admin_password }}"
+
+    - name: Wait for AWX containers to be healthy
+      shell: docker ps --filter "name=awx" --format "{{{{.Status}}}}"
+      register: awx_status
+      until: awx_status.stdout.find('healthy') != -1 or awx_status.stdout.find('Up') != -1
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    #=========================================================================
+    # SECTION 6: Configure Firewall
+    #=========================================================================
+    - name: Enable UFW firewall
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Allow SSH through firewall
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Allow AWX web interface through firewall
+      ufw:
+        rule: allow
+        port: "{{ awx_host_port }}"
+        proto: tcp
+
+    - name: Allow HTTP for load balancer (if needed later)
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: Allow HTTPS (if needed later)
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+
+    - name: Allow PostgreSQL (for web app database)
+      ufw:
+        rule: allow
+        port: '5432'
+        proto: tcp
+
+    - name: Reload UFW
+      ufw:
+        state: reloaded
+
+    #=========================================================================
+    # SECTION 7: Create Management Scripts
+    #=========================================================================
+    - name: Create AWX management script
+      copy:
+        dest: /usr/local/bin/awx-manage.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          # AWX Management Script
+          # Location: /usr/local/bin/awx-manage.sh
+
+          AWX_DIR="{{ awx_install_dir }}"
+          
+          case "$1" in
+            start)
+              echo "Starting AWX services..."
+              cd $AWX_DIR && docker-compose up -d
+              ;;
+            stop)
+              echo "Stopping AWX services..."
+              cd $AWX_DIR && docker-compose down
+              ;;
+            restart)
+              echo "Restarting AWX services..."
+              cd $AWX_DIR && docker-compose restart
+              ;;
+            status)
+              echo "AWX Container Status:"
+              docker ps --filter "name=awx"
+              ;;
+            logs)
+              echo "AWX Logs (press Ctrl+C to exit):"
+              cd $AWX_DIR && docker-compose logs -f
+              ;;
+            backup)
+              BACKUP_DIR="/backup/awx-$(date +%Y%m%d-%H%M%S)"
+              echo "Creating backup in $BACKUP_DIR..."
+              mkdir -p $BACKUP_DIR
+              cd $AWX_DIR && docker-compose exec -T postgres pg_dumpall -U awx > $BACKUP_DIR/database.sql
+              cp -r $AWX_DIR $BACKUP_DIR/
+              echo "Backup completed: $BACKUP_DIR"
+              ;;
+            *)
+              echo "Usage: $0 {start|stop|restart|status|logs|backup}"
+              exit 1
+              ;;
+          esac
+
+    #=========================================================================
+    # SECTION 8: Final Verification
+    #=========================================================================
+    - name: Wait for AWX API to be ready
+      uri:
+        url: "http://localhost:{{ awx_host_port }}/api/v2/ping/"
+        method: GET
+        status_code: 200
+      register: awx_api
+      until: awx_api.status == 200
+      retries: 30
+      delay: 10
+
+    - name: Get container status
+      command: docker ps --format "table {{{{.Names}}}}\t{{{{.Status}}}}"
+      register: container_status
+      changed_when: false
+
+  post_tasks:
+    - name: Display installation summary
+      debug:
+        msg:
+          - "=========================================="
+          - "AWX Installation Completed Successfully!"
+          - "=========================================="
+          - ""
+          - "Access Information:"
+          - "  URL: http://{{ ansible_host }}:{{ awx_host_port }}"
+          - "  Username: {{ awx_admin_user }}"
+          - "  Password: {{ awx_admin_password }}"
+          - ""
+          - "Management Commands:"
+          - "  Start:   sudo awx-manage.sh start"
+          - "  Stop:    sudo awx-manage.sh stop"
+          - "  Restart: sudo awx-manage.sh restart"
+          - "  Status:  sudo awx-manage.sh status"
+          - "  Logs:    sudo awx-manage.sh logs"
+          - "  Backup:  sudo awx-manage.sh backup"
+          - ""
+          - "Docker Commands:"
+          - "  View containers: docker ps"
+          - "  View logs: cd {{ awx_install_dir }} && docker-compose logs -f"
+          - ""
+          - "Container Status:"
+          - "{{ container_status.stdout_lines | join('\n') }}"
+          - "=========================================="
+
+    - name: Save access information to file
+      copy:
+        dest: "./awx-access-info.txt"
+        content: |
+          AWX Installation Access Information
+          ====================================
+          
+          Date: {{ ansible_date_time.iso8601 }}
+          Server: {{ inventory_hostname }} ({{ ansible_host }})
+          
+          Access URL: http://{{ ansible_host }}:{{ awx_host_port }}
+          Username: {{ awx_admin_user }}
+          Password: {{ awx_admin_password }}
+          
+          Installation Directory: {{ awx_install_dir }}
+          
+          Management Script: sudo awx-manage.sh {start|stop|restart|status|logs|backup}
+          
+          Next Steps:
+          1. Open http://{{ ansible_host }}:{{ awx_host_port }} in your browser
+          2. Login with the credentials above
+          3. Configure your first organization and project
+          4. Add your inventory and credentials
+          5. Create job templates
+          
+          ====================================
+      delegate_to: localhost
+      become: no
+
+    - name: Final reminder
+      debug:
+        msg:
+          - ""
+          - "✅ Installation complete! Access info saved to: ./awx-access-info.txt"
+          - ""
+          - "🌐 Open your browser to: http://{{ ansible_host }}:{{ awx_host_port }}"
+          - ""

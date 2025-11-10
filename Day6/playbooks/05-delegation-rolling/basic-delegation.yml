@@ -1,0 +1,108 @@
+---
+# Basic Delegation Example
+# Demonstrates task delegation to different hosts
+
+- name: Basic Task Delegation
+  hosts: webservers
+  gather_facts: yes
+
+  vars:
+    deployment_id: "deploy-{{ ansible_date_time.epoch }}"
+
+  tasks:
+  - name: Show which host we're targeting
+    debug:
+      msg: "Processing {{ inventory_hostname }}"
+
+  #
+  # Delegation to localhost (control machine)
+  #
+  - name: Log deployment start (delegated to localhost)
+    lineinfile:
+      path: /tmp/ansible-delegation-log.txt
+      line: "{{ ansible_date_time.iso8601 }} - Starting deployment on {{ inventory_hostname }}"
+      create: yes
+    delegate_to: localhost
+    # This runs on the control machine for each webserver
+
+  - name: Create local backup directory
+    file:
+      path: "/tmp/backups/{{ inventory_hostname }}"
+      state: directory
+      mode: '0755'
+    delegate_to: localhost
+    # Creates directories on control machine
+
+    #
+    # Delegation to load balancer
+    #
+  - name: Check load balancer status (delegated to lb1)
+    command: echo "Checking LB status for {{ inventory_hostname }}"
+    delegate_to: lb1
+    register: lb_check
+    changed_when: false
+
+  - name: Display LB check result
+    debug:
+      msg: "Load balancer check: {{ lb_check.stdout }}"
+
+  #
+  # Delegation to database server
+  #
+  - name: Query database (delegated to db1)
+    command: echo "SELECT status FROM servers WHERE name='{{ inventory_hostname }}'"
+    delegate_to: db1
+    register: db_query
+    changed_when: false
+
+  - name: Show database query result
+    debug:
+      msg: "Database query: {{ db_query.stdout }}"
+
+  #
+  # Delegation to monitoring server
+  #
+  - name: Send metrics to monitoring (delegated to monitor1)
+    shell: |
+      echo "{{ ansible_date_time.iso8601 }},{{ inventory_hostname }},deployment_start" >> /tmp/monitoring-events.log
+    delegate_to: monitor1
+
+  #
+  # Delegation with facts
+  #
+  - name: Gather facts from database server
+    setup:
+    delegate_to: db1
+    delegate_facts: true
+    # Facts are gathered for db1 and stored in hostvars
+
+  - name: Use delegated facts
+    debug:
+      msg: "Database server {{ groups['databases'][0] }} has {{ hostvars[groups['databases'][0]]['ansible_processor_cores'] }} CPU cores"
+    run_once: true
+
+  #
+  # Final log entry
+  #
+  - name: Log deployment complete (delegated to localhost)
+    lineinfile:
+      path: /tmp/ansible-delegation-log.txt
+      line: "{{ ansible_date_time.iso8601 }} - Completed deployment on {{ inventory_hostname }}"
+    delegate_to: localhost
+
+# How to use:
+#
+# 1. Run the playbook:
+#    ansible-playbook -i inventory.ini basic-delegation.yml
+#
+# 2. Check the log file created on localhost:
+#    cat /tmp/ansible-delegation-log.txt
+#
+# 3. Check monitoring events:
+#    cat /tmp/monitoring-events.log
+#
+# Key observations:
+# - Tasks with delegate_to run on specified host, not target host
+# - Each webserver triggers delegated tasks (4 log entries for 4 webservers)
+# - Delegation is useful for centralized logging, monitoring, and orchestration
+# - delegate_facts: true allows gathering facts for delegated host

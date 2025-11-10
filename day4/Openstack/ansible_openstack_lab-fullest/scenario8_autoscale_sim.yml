@@ -93,6 +93,40 @@
       state: present
     loop: "{{ range(1, count + 1) | list }}"
 
+  - name: Wait for web volumes to become available
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ instance_prefix }}{{ item }}-volume"
+    register: volume_wait_results
+    until:
+    - volume_wait_results.volumes | length > 0
+    - volume_wait_results.volumes[0].status in ['available', 'in-use', 'error']
+    retries: 30
+    delay: 5
+    failed_when: volume_wait_results.volumes[0].status == 'error'
+    loop: "{{ range(1, count + 1) | list }}"
+    loop_control:
+      label: "{{ instance_prefix }}{{ item }}-volume"
+
+  - name: Ensure bootable flag remains set on web volumes
+    command: "openstack volume set --bootable {{ instance_prefix }}{{ item }}-volume"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+    loop: "{{ range(1, count + 1) | list }}"
+    loop_control:
+      label: "{{ instance_prefix }}{{ item }}-volume"
+
+  - name: Show web volume readiness summary
+    debug:
+      msg: |
+        Volume {{ item.item }} ready:
+          Name: {{ item.volumes[0].name }}
+          ID: {{ item.volumes[0].id }}
+          Status: {{ item.volumes[0].status }}
+          Bootable: {{ item.volumes[0].is_bootable }}
+    loop: "{{ volume_wait_results.results }}"
+
   - name: Launch multiple web VMs
     openstack.cloud.server:
       cloud: "{{ cloud_name }}"

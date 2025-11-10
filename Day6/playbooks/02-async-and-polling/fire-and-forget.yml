@@ -1,0 +1,126 @@
+---
+- name: Fire-and-Forget Pattern
+  hosts: local
+  gather_facts: yes
+
+  vars:
+    job_registry: /tmp/async_jobs.json
+
+  tasks:
+  - name: Create work directory
+    file:
+      path: /tmp/async_work
+      state: directory
+      mode: '0755'
+
+  - name: Start long-running task (don't wait)
+    shell: |
+      echo "Task started at $(date)" > /tmp/async_work/task1.log
+      for i in {1..60}; do
+        echo "Progress: $i/60" >> /tmp/async_work/task1.log
+        sleep 1
+      done
+      echo "Task completed at $(date)" >> /tmp/async_work/task1.log
+    async: 120
+    poll: 0
+    register: task1
+
+  - name: Start another independent task
+    shell: |
+      echo "Backup started at $(date)" > /tmp/async_work/backup.log
+      tar -czf /tmp/async_work/backup_$(date +%s).tar.gz /etc 2>/dev/null || true
+      echo "Backup completed at $(date)" >> /tmp/async_work/backup.log
+    async: 180
+    poll: 0
+    register: task2
+
+  - name: Start data processing task
+    shell: |
+      echo "Processing started at $(date)" > /tmp/async_work/processing.log
+      dd if=/dev/zero of=/tmp/async_work/testfile bs=1M count=100 2>&1 | tee -a /tmp/async_work/processing.log
+      echo "Processing completed at $(date)" >> /tmp/async_work/processing.log
+    async: 60
+    poll: 0
+    register: task3
+
+  - name: Save all job IDs for later reference
+    copy:
+      content: |
+        {
+          "task1": {
+            "job_id": "{{ task1.ansible_job_id }}",
+            "description": "Long-running task",
+            "started": "{{ ansible_date_time.iso8601 }}",
+            "timeout": 120
+          },
+          "task2": {
+            "job_id": "{{ task2.ansible_job_id }}",
+            "description": "Backup task",
+            "started": "{{ ansible_date_time.iso8601 }}",
+            "timeout": 180
+          },
+          "task3": {
+            "job_id": "{{ task3.ansible_job_id }}",
+            "description": "Data processing",
+            "started": "{{ ansible_date_time.iso8601 }}",
+            "timeout": 60
+          }
+        }
+      dest: "{{ job_registry }}"
+      mode: '0644'
+
+  - name: Display launched jobs
+    debug:
+      msg: |
+        ✅ Launched 3 background tasks!
+
+        Task 1: {{ task1.ansible_job_id }}
+          - Long-running task (60 seconds)
+          - Log: /tmp/async_work/task1.log
+
+        Task 2: {{ task2.ansible_job_id }}
+          - Backup task
+          - Log: /tmp/async_work/backup.log
+
+        Task 3: {{ task3.ansible_job_id }}
+          - Data processing
+          - Log: /tmp/async_work/processing.log
+
+        Job registry saved to: {{ job_registry }}
+
+        💡 Check status later with:
+        ansible-playbook -i inventory.ini status-checking.yml
+
+  - name: Continue with immediate work
+    debug:
+      msg: "All background tasks are running. Continuing with other work..."
+
+  - name: Do some quick maintenance
+    shell: |
+      echo "Maintenance at $(date)" > /tmp/async_work/maintenance.log
+      df -h >> /tmp/async_work/maintenance.log
+      free -h >> /tmp/async_work/maintenance.log
+      uptime >> /tmp/async_work/maintenance.log
+
+  - name: Final message
+    debug:
+      msg: |
+        Playbook completed!
+        Background tasks are still running.
+        Check {{ job_registry }} for job IDs.
+
+# Usage examples:
+#
+# Launch tasks:
+#   ansible-playbook -i inventory.ini fire-and-forget.yml
+#
+# Check status (run after a few seconds):
+#   ansible-playbook -i inventory.ini status-checking.yml
+#
+# View task logs:
+#   cat /tmp/async_work/task1.log
+#   cat /tmp/async_work/backup.log
+#   cat /tmp/async_work/processing.log
+#
+# View job registry:
+#   cat /tmp/async_jobs.json | python3 -m json.tool

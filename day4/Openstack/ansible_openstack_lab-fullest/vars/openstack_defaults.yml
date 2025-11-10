@@ -1,0 +1,38 @@
+---
+# Centralized OpenStack configuration for all scenario playbooks and helper scripts
+# Update these values to match your lab environment.
+openstack_cloud_name: "mycloud"
+openstack_auth_url: "http://10.0.3.15/identity"
+openstack_region_name: "RegionOne"
+openstack_interface: "public"
+openstack_identity_api_version: 3
+
+openstack_username: "admin"
+openstack_password: "secret"
+openstack_project_name: "admin"
+openstack_project_id: ""
+openstack_user_domain_name: "Default"
+openstack_project_domain_name: "Default"
+
+openstack_default_role: "admin"
+openstack_demo_user: "demo"
+openstack_demo_password: "secret"
+openstack_demo_project: "demo"
+
+openstack_default_image: "ubuntu-22.04"
+openstack_default_flavor: "m1.small"
+openstack_default_network: "private"
+openstack_default_subnet_cidr: "192.168.100.0/24"
+openstack_default_keypair: "demo-key"
+openstack_default_public_key: "~/.ssh/id_rsa.pub"
+openstack_default_security_group: "default"
+openstack_default_timeout: 600
+
+openstack_ansible_user: "ubuntu"
+openstack_ansible_private_key: "~/.ssh/id_rsa"
+
+# Optional endpoints for services beyond Identity (override when needed)
+openstack_image_endpoint: ""
+openstack_compute_endpoint: ""
+openstack_network_endpoint: ""
+openstack_volume_endpoint: ""

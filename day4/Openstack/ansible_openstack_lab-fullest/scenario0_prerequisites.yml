@@ -147,6 +147,11 @@
       label: "{{ item.item.name }}"
     ignore_errors: yes
 
+  - name: Get final image list from OpenStack
+    openstack.cloud.image_info:
+      cloud: "{{ cloud_name }}"
+    register: final_images_before_verify
+
   - name: Verify all images are bootable
     openstack.cloud.image:
       cloud: "{{ cloud_name }}"
@@ -155,12 +160,12 @@
         bootable: "true"
       state: present
     loop: "{{ images }}"
-    when: item.name in (final_images.images | default([]) | map(attribute='name') | list)
+    when: item.name in (final_images_before_verify.images | default([]) | map(attribute='name') | list)
     ignore_errors: yes
     loop_control:
       label: "{{ item.name }}"
 
-  - name: Get final image list from OpenStack
+  - name: Refresh image list after bootable enforcement
     openstack.cloud.image_info:
       cloud: "{{ cloud_name }}"
     register: final_images

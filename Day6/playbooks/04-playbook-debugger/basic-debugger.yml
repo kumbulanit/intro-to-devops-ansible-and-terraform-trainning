@@ -1,0 +1,70 @@
+---
+# Basic Debugger Example
+# This playbook demonstrates basic debugger activation on task failures
+
+- name: Basic Debugger Example
+  hosts: local
+  gather_facts: no
+  debugger: on_failed # Activate debugger when task fails
+
+  vars:
+    app_name: "myapp"
+    app_version: "1.0.0"
+    config_dir: "/tmp/myapp/config"
+
+  tasks:
+  - name: Display application information
+    debug:
+      msg: "Setting up {{ app_name }} version {{ app_version }}"
+
+  - name: Create config directory (will succeed)
+    file:
+      path: "{{ config_dir }}"
+      state: directory
+      mode: '0755'
+    register: dir_result
+
+  - name: Show directory creation result
+    debug:
+      msg: "Directory created: {{ dir_result.path }}"
+
+  - name: Copy non-existent file (will fail - triggers debugger)
+    copy:
+      src: /nonexistent/config.yml
+      dest: "{{ config_dir }}/config.yml"
+    register: copy_result
+    # When this fails, debugger will activate
+    # Try: p task.args
+    #      task.args['src'] = '/tmp/existing-file.txt'
+    #      redo
+
+  - name: This task won't run (previous task failed)
+    debug:
+      msg: "Configuration complete"
+
+# How to use this playbook:
+#
+# 1. Run with debugger enabled:
+#    ANSIBLE_ENABLE_TASK_DEBUGGER=True ansible-playbook -i inventory.ini basic-debugger.yml
+#
+# 2. When debugger activates at the failed copy task, try these commands:
+#
+#    [localhost] TASK: Copy non-existent file (debug)> p app_name
+#    'myapp'
+#
+#    [localhost] TASK: Copy non-existent file (debug)> p task.args
+#    {'dest': '/tmp/myapp/config/config.yml', 'src': '/nonexistent/config.yml'}
+#
+#    [localhost] TASK: Copy non-existent file (debug)> p result
+#    (shows error details)
+#
+# 3. Create a test file and fix the source:
+#    First create: echo "test: value" > /tmp/test-config.yml
+#
+#    [localhost] TASK: Copy non-existent file (debug)> task.args['src'] = '/tmp/test-config.yml'
+#
+#    [localhost] TASK: Copy non-existent file (debug)> redo
+#    (task runs again with corrected path)
+#
+# 4. Continue execution:
+#    [localhost] TASK: Copy non-existent file (debug)> c

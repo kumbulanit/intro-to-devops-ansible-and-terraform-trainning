@@ -1,0 +1,346 @@
+---
+# =============================================================================
+# Three-Tier Application Infrastructure Provisioning on OpenStack
+# =============================================================================
+# Description: Provisions complete three-tier infrastructure (LB + Web + DB)
+#              on OpenStack with security groups and networking
+#
+# Prerequisites:
+#   - clouds.yaml configured
+#   - SSH keypair in OpenStack
+#   - Available quota (4 VMs, 1 Floating IP minimum)
+#
+# Usage:
+#   ansible-playbook 03-provision-three-tier-infrastructure.yml \
+#     -e "cloud_name=mycloud"
+# =============================================================================
+
+- name: Provision Three-Tier Infrastructure on OpenStack
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    cloud_name: "{{ lookup('env', 'OS_CLOUD') | default('devstack', true) }}"
+    key_name: webapp-key
+    network_name: private
+    floating_ip_pool: public
+    ssh_private_key: "{{ lookup('env', 'HOME') }}/.ssh/id_rsa"
+    
+    # Security groups configuration
+    security_groups:
+      - name: lb-sg
+        description: Load balancer security group
+        rules:
+          - { protocol: tcp, port: 22, cidr: '0.0.0.0/0', desc: 'SSH' }
+          - { protocol: tcp, port: 80, cidr: '0.0.0.0/0', desc: 'HTTP' }
+          - { protocol: tcp, port: 443, cidr: '0.0.0.0/0', desc: 'HTTPS' }
+          - { protocol: tcp, port: 8404, cidr: '0.0.0.0/0', desc: 'HAProxy Stats' }
+          - { protocol: icmp, port: -1, cidr: '0.0.0.0/0', desc: 'Ping' }
+      
+      - name: web-sg
+        description: Web server security group
+        rules:
+          - { protocol: tcp, port: 22, cidr: '0.0.0.0/0', desc: 'SSH' }
+          - { protocol: tcp, port: 80, cidr: '10.0.0.0/8', desc: 'HTTP from LB' }
+          - { protocol: tcp, port: 443, cidr: '10.0.0.0/8', desc: 'HTTPS from LB' }
+          - { protocol: icmp, port: -1, cidr: '0.0.0.0/0', desc: 'Ping' }
+      
+      - name: db-sg
+        description: Database security group
+        rules:
+          - { protocol: tcp, port: 22, cidr: '0.0.0.0/0', desc: 'SSH' }
+          - { protocol: tcp, port: 5432, cidr: '10.0.0.0/8', desc: 'PostgreSQL from Web' }
+          - { protocol: icmp, port: -1, cidr: '0.0.0.0/0', desc: 'Ping' }
+    
+    # VM instances configuration
+    instances:
+      - name: haproxy-lb
+        flavor: m1.small
+        image: ubuntu-22.04
+        security_groups: [lb-sg, default]
+        metadata:
+          tier: loadbalancer
+          environment: production
+          application: webapp
+        floating_ip: true
+      
+      - name: web-server-1
+        flavor: m1.medium
+        image: ubuntu-22.04
+        security_groups: [web-sg, default]
+        metadata:
+          tier: webserver
+          environment: production
+          application: webapp
+        floating_ip: false
+      
+      - name: web-server-2
+        flavor: m1.medium
+        image: ubuntu-22.04
+        security_groups: [web-sg, default]
+        metadata:
+          tier: webserver
+          environment: production
+          application: webapp
+        floating_ip: false
+      
+      - name: postgresql-db
+        flavor: m1.large
+        image: ubuntu-22.04
+        security_groups: [db-sg, default]
+        metadata:
+          tier: database
+          environment: production
+          application: webapp
+        floating_ip: false
+
+  tasks:
+    # =========================================================================
+    # PHASE 1: Create Security Groups
+    # =========================================================================
+    
+    - name: Create security groups
+      openstack.cloud.security_group:
+        cloud: "{{ cloud_name }}"
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        state: present
+      loop: "{{ security_groups }}"
+      register: created_security_groups
+
+    - name: Add security group rules
+      openstack.cloud.security_group_rule:
+        cloud: "{{ cloud_name }}"
+        security_group: "{{ item.0.name }}"
+        protocol: "{{ item.1.protocol }}"
+        port_range_min: "{{ item.1.port if item.1.port != -1 else omit }}"
+        port_range_max: "{{ item.1.port if item.1.port != -1 else omit }}"
+        remote_ip_prefix: "{{ item.1.cidr }}"
+        state: present
+      with_subelements:
+        - "{{ security_groups }}"
+        - rules
+      ignore_errors: true
+
+    # =========================================================================
+    # PHASE 2: Create SSH Keypair
+    # =========================================================================
+
+    - name: Create/Import SSH keypair to OpenStack
+      openstack.cloud.keypair:
+        cloud: "{{ cloud_name }}"
+        name: "{{ key_name }}"
+        public_key_file: "{{ ssh_private_key }}.pub"
+        state: present
+
+    # =========================================================================
+    # PHASE 3: Launch VM Instances
+    # =========================================================================
+
+    - name: Launch instances
+      openstack.cloud.server:
+        cloud: "{{ cloud_name }}"
+        name: "{{ item.name }}"
+        flavor: "{{ item.flavor }}"
+        image: "{{ item.image }}"
+        key_name: "{{ key_name }}"
+        network: "{{ network_name }}"
+        security_groups: "{{ item.security_groups }}"
+        auto_ip: "{{ item.floating_ip }}"
+        meta: "{{ item.metadata }}"
+        wait: true
+        timeout: 600
+        state: present
+      loop: "{{ instances }}"
+      register: launched_instances
+
+    - name: Display launched instances
+      debug:
+        msg: |
+          Instance: {{ item.server.name }}
+          ID: {{ item.server.id }}
+          Private IP: {{ item.server.private_v4 }}
+          Public IP: {{ item.server.public_v4 | default('N/A') }}
+          Status: {{ item.server.status }}
+      loop: "{{ launched_instances.results }}"
+
+    # =========================================================================
+    # PHASE 4: Save Inventory File
+    # =========================================================================
+
+    - name: Create inventory directory
+      file:
+        path: ./inventories/production
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: Generate dynamic inventory file
+      copy:
+        dest: ./inventories/production/hosts
+        mode: '0644'
+        content: |
+          # Three-Tier Application Inventory
+          # Generated: {{ ansible_date_time.iso8601 }}
+          
+          [loadbalancers]
+          {% for instance in launched_instances.results %}
+          {% if instance.server.metadata.tier == 'loadbalancer' %}
+          {{ instance.server.name }} ansible_host={{ instance.server.public_v4 }} private_ip={{ instance.server.private_v4 }}
+          {% endif %}
+          {% endfor %}
+          
+          [webservers]
+          {% for instance in launched_instances.results %}
+          {% if instance.server.metadata.tier == 'webserver' %}
+          {{ instance.server.name }} ansible_host={{ instance.server.private_v4 }}
+          {% endif %}
+          {% endfor %}
+          
+          [databases]
+          {% for instance in launched_instances.results %}
+          {% if instance.server.metadata.tier == 'database' %}
+          {{ instance.server.name }} ansible_host={{ instance.server.private_v4 }}
+          {% endif %}
+          {% endfor %}
+          
+          [webapp:children]
+          loadbalancers
+          webservers
+          databases
+          
+          [webapp:vars]
+          ansible_user=ubuntu
+          ansible_ssh_private_key_file={{ ssh_private_key }}
+          ansible_python_interpreter=/usr/bin/python3
+          ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+      delegate_to: localhost
+
+    # =========================================================================
+    # PHASE 5: Save Infrastructure Information
+    # =========================================================================
+
+    - name: Save infrastructure details
+      copy:
+        dest: ./infrastructure-info.txt
+        mode: '0644'
+        content: |
+          =====================================
+          Three-Tier Infrastructure Details
+          =====================================
+          Deployed: {{ ansible_date_time.iso8601 }}
+          Cloud: {{ cloud_name }}
+          
+          LOAD BALANCER TIER
+          ==================
+          {% for instance in launched_instances.results %}
+          {% if instance.server.metadata.tier == 'loadbalancer' %}
+          Name: {{ instance.server.name }}
+          Public IP: {{ instance.server.public_v4 }}
+          Private IP: {{ instance.server.private_v4 }}
+          Access: http://{{ instance.server.public_v4 }}
+          HAProxy Stats: http://{{ instance.server.public_v4 }}:8404/stats
+          {% endif %}
+          {% endfor %}
+          
+          WEB SERVERS TIER
+          ================
+          {% for instance in launched_instances.results %}
+          {% if instance.server.metadata.tier == 'webserver' %}
+          Name: {{ instance.server.name }}
+          Private IP: {{ instance.server.private_v4 }}
+          {% endif %}
+          {% endfor %}
+          
+          DATABASE TIER
+          =============
+          {% for instance in launched_instances.results %}
+          {% if instance.server.metadata.tier == 'database' %}
+          Name: {{ instance.server.name }}
+          Private IP: {{ instance.server.private_v4 }}
+          {% endif %}
+          {% endfor %}
+          
+          SSH ACCESS
+          ==========
+          {% for instance in launched_instances.results %}
+          {% if instance.server.public_v4 is defined %}
+          ssh ubuntu@{{ instance.server.public_v4 }}  # {{ instance.server.name }}
+          {% endif %}
+          {% endfor %}
+          
+          Note: For private IPs, SSH through load balancer first:
+          ssh -J ubuntu@LB_PUBLIC_IP ubuntu@PRIVATE_IP
+          
+          NEXT STEPS
+          ==========
+          1. Wait for all VMs to be fully ready (~2 minutes)
+          2. Run: ansible-playbook 04-configure-database.yml
+          3. Run: ansible-playbook 05-configure-webservers.yml
+          4. Run: ansible-playbook 06-configure-loadbalancer.yml
+          
+          Or run all at once:
+          ansible-playbook 07-deploy-complete-stack.yml
+          
+          =====================================
+      delegate_to: localhost
+
+    # =========================================================================
+    # PHASE 6: Wait for SSH Availability
+    # =========================================================================
+
+    - name: Wait for SSH on instances with public IPs
+      wait_for:
+        host: "{{ item.server.public_v4 }}"
+        port: 22
+        delay: 10
+        timeout: 300
+        state: started
+      loop: "{{ launched_instances.results }}"
+      when: item.server.public_v4 is defined
+      delegate_to: localhost
+
+    - name: Wait for cloud-init to complete
+      pause:
+        seconds: 30
+        prompt: "Waiting for cloud-init to complete on all VMs..."
+
+    # =========================================================================
+    # PHASE 7: Display Summary
+    # =========================================================================
+
+    - name: Display deployment summary
+      debug:
+        msg: |
+          ========================================
+          Infrastructure Provisioning Complete!
+          ========================================
+          
+          Total VMs deployed: {{ launched_instances.results | length }}
+          
+          Load Balancer: 
+          {% for instance in launched_instances.results %}
+          {% if instance.server.metadata.tier == 'loadbalancer' %}
+            - {{ instance.server.name }}: {{ instance.server.public_v4 }}
+          {% endif %}
+          {% endfor %}
+          
+          Web Servers:
+          {% for instance in launched_instances.results %}
+          {% if instance.server.metadata.tier == 'webserver' %}
+            - {{ instance.server.name }}: {{ instance.server.private_v4 }}
+          {% endif %}
+          {% endfor %}
+          
+          Database:
+          {% for instance in launched_instances.results %}
+          {% if instance.server.metadata.tier == 'database' %}
+            - {{ instance.server.name }}: {{ instance.server.private_v4 }}
+          {% endif %}
+          {% endfor %}
+          
+          Inventory saved to: ./inventories/production/hosts
+          Details saved to: ./infrastructure-info.txt
+          
+          Next: Run configuration playbooks to deploy application
+          ========================================

@@ -81,21 +81,33 @@
         state: present
       register: volume_result
     
-    - name: Ensure volume is marked as bootable
-      command: "openstack volume set --bootable {{ volume_name }}"
-      environment:
-        OS_CLOUD: "{{ cloud_name }}"
-      when: volume_result.changed
-      ignore_errors: yes
-    
     - name: Wait for volume to be available
       openstack.cloud.volume_info:
         cloud: "{{ cloud_name }}"
         name: "{{ volume_name }}"
       register: volume_check
-      until: volume_check.volumes[0].status == 'available'
-      retries: 10
-      delay: 3
+      until: 
+        - volume_check.volumes | length > 0
+        - volume_check.volumes[0].status in ['available', 'error']
+      retries: 30
+      delay: 5
+      failed_when: volume_check.volumes[0].status == 'error'
+    
+    - name: Ensure volume is marked as bootable
+      command: "openstack volume set --bootable {{ volume_name }}"
+      environment:
+        OS_CLOUD: "{{ cloud_name }}"
+      ignore_errors: yes
+    
+    - name: Display volume information
+      debug:
+        msg: |
+          Volume created:
+          Name: {{ volume_check.volumes[0].name }}
+          ID: {{ volume_check.volumes[0].id }}
+          Status: {{ volume_check.volumes[0].status }}
+          Size: {{ volume_check.volumes[0].size }} GB
+          Bootable: {{ volume_check.volumes[0].is_bootable }}
     
     - name: Launch a basic VM with volume
       openstack.cloud.server:

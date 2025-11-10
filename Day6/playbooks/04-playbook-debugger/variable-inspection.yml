@@ -1,0 +1,131 @@
+---
+# Variable Inspection Example
+# This playbook demonstrates how to inspect simple and complex variables in the debugger
+
+- name: Variable Inspection
+  hosts: local
+  gather_facts: yes
+  debugger: always # Debug every task for demonstration
+
+  vars:
+    # Simple variables
+    app_name: "webservice"
+    app_version: "2.5.0"
+    app_port: 8080
+
+    # Complex nested structure
+    database:
+      host: "db.example.com"
+      port: 5432
+      name: "production_db"
+      credentials:
+        username: "app_user"
+        password: "secret123"
+      connection_pool:
+        min_size: 5
+        max_size: 20
+        timeout: 30
+
+    # List of items
+    required_packages:
+    - nginx
+    - python3
+    - postgresql-client
+
+    # Dictionary of environments
+    environments:
+      development:
+        url: "http://dev.example.com"
+        debug: true
+      staging:
+        url: "http://staging.example.com"
+        debug: true
+      production:
+        url: "https://www.example.com"
+        debug: false
+
+  tasks:
+  - name: Display simple variables
+    debug:
+      msg: "Deploying {{ app_name }} v{{ app_version }} on port {{ app_port }}"
+    # Try in debugger:
+    #   p app_name
+    #   p app_version
+    #   p app_port
+
+  - name: Access database configuration
+    debug:
+      msg: "Database: {{ database.host }}:{{ database.port }}/{{ database.name }}"
+    # Try in debugger:
+    #   p database
+    #   p database['host']
+    #   p database.credentials.username
+    #   p database['connection_pool']['max_size']
+
+  - name: Work with list variables
+    debug:
+      msg: "Installing {{ required_packages | length }} packages"
+    # Try in debugger:
+    #   p required_packages
+    #   p required_packages[0]
+    #   p required_packages | length
+
+  - name: Access environment variables
+    debug:
+      msg: "Production URL: {{ environments.production.url }}"
+    # Try in debugger:
+    #   p environments
+    #   p environments['production']
+    #   p environments.production.url
+    #   p environments.keys()
+
+  - name: Access Ansible facts
+    debug:
+      msg: "Running on {{ ansible_hostname }}"
+    # Try in debugger:
+    #   p ansible_hostname
+    #   p ansible_distribution
+    #   p ansible_default_ipv4
+    #   p ansible_processor_cores
+
+  - name: Modify variables in debugger
+    debug:
+      msg: "App version is {{ app_version }}"
+    # Try in debugger:
+    #   p app_version
+    #   app_version = '3.0.0'
+    #   p app_version
+    #   redo
+    # (will show new version)
+
+    # How to use this playbook:
+    #
+    # 1. Run with debugger enabled:
+    #    ansible-playbook -i inventory.ini variable-inspection.yml
+    #
+    # 2. At each debug prompt, practice inspecting variables:
+    #
+    #    Simple variables:
+    #    [localhost] TASK: task_name (debug)> p app_name
+    #    [localhost] TASK: task_name (debug)> p app_version
+    #
+    #    Nested dictionaries:
+    #    [localhost] TASK: task_name (debug)> p database
+    #    [localhost] TASK: task_name (debug)> p database['host']
+    #    [localhost] TASK: task_name (debug)> p database.credentials.username
+    #
+    #    Lists:
+    #    [localhost] TASK: task_name (debug)> p required_packages
+    #    [localhost] TASK: task_name (debug)> p required_packages[0]
+    #
+    #    Ansible facts:
+    #    [localhost] TASK: task_name (debug)> p ansible_hostname
+    #    [localhost] TASK: task_name (debug)> p ansible_os_family
+    #
+    # 3. Modify variables:
+    #    [localhost] TASK: task_name (debug)> app_version = '4.0.0'
+    #    [localhost] TASK: task_name (debug)> database['port'] = 5433
+    #    [localhost] TASK: task_name (debug)> redo
+    #
+    # 4. Continue to next task:
+    #    [localhost] TASK: task_name (debug)> c

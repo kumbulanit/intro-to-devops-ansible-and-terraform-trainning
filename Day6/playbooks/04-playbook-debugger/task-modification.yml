@@ -1,0 +1,109 @@
+---
+# Task Modification Example
+# This playbook demonstrates how to modify task arguments in the debugger and retry
+
+- name: Task Modification Example
+  hosts: local
+  gather_facts: no
+  debugger: on_failed
+
+  vars:
+    source_file: "/wrong/path/application.conf"
+    dest_file: "/tmp/myapp/application.conf"
+    backup_dir: "/tmp/backups"
+    app_url: "https://invalid-url.example.com/app.tar.gz"
+
+  tasks:
+  - name: Create destination directory
+    file:
+      path: /tmp/myapp
+      state: directory
+      mode: '0755'
+
+  - name: Create backup directory
+    file:
+      path: "{{ backup_dir }}"
+      state: directory
+      mode: '0755'
+
+  - name: Copy file with wrong path (will fail)
+    copy:
+      src: "{{ source_file }}"
+      dest: "{{ dest_file }}"
+    register: copy_result
+    # When this fails:
+    # 1. p task.args - see the wrong path
+    # 2. Create a test file: !echo "test config" > /tmp/test.conf
+    # 3. task.args['src'] = '/tmp/test.conf'
+    # 4. redo - task runs again with corrected path
+
+  - name: Download from wrong URL (will fail)
+    get_url:
+      url: "{{ app_url }}"
+      dest: /tmp/application.tar.gz
+      timeout: 10
+    register: download_result
+    # When this fails:
+    # 1. p app_url - see the wrong URL
+    # 2. task.args['url'] = 'https://httpbin.org/robots.txt'
+    # 3. redo - try download again
+
+  - name: Create backup with wrong source (will fail)
+    command: cp {{ dest_file }} {{ backup_dir }}/backup-{{ ansible_date_time.epoch }}.conf
+    register: backup_result
+    # When this fails:
+    # 1. p task.args
+    # 2. Create source file first in debugger
+    # 3. redo
+
+    # How to use this playbook:
+    #
+    # 1. Run the playbook:
+    #    ansible-playbook -i inventory.ini task-modification.yml
+    #
+    # 2. When copy task fails:
+    #
+    #    [localhost] TASK: Copy file with wrong path (debug)> p task.args
+    #    {'dest': '/tmp/myapp/application.conf', 'src': '/wrong/path/application.conf'}
+    #
+    #    [localhost] TASK: Copy file with wrong path (debug)> p source_file
+    #    '/wrong/path/application.conf'
+    #
+    #    # Create a test file (use ! to run shell commands in debugger)
+    #    [localhost] TASK: Copy file with wrong path (debug)> !echo "test config" > /tmp/test.conf
+    #
+    #    # Fix the source path
+    #    [localhost] TASK: Copy file with wrong path (debug)> task.args['src'] = '/tmp/test.conf'
+    #
+    #    [localhost] TASK: Copy file with wrong path (debug)> p task.args
+    #    {'dest': '/tmp/myapp/application.conf', 'src': '/tmp/test.conf'}
+    #
+    #    # Retry the task
+    #    [localhost] TASK: Copy file with wrong path (debug)> redo
+    #
+    # 3. When download task fails:
+    #
+    #    [localhost] TASK: Download from wrong URL (debug)> p task.args
+    #    {'dest': '/tmp/application.tar.gz',
+    #     'timeout': 10,
+    #     'url': 'https://invalid-url.example.com/app.tar.gz'}
+    #
+    #    # Fix the URL
+    #    [localhost] TASK: Download from wrong URL (debug)> task.args['url'] = 'https://httpbin.org/robots.txt'
+    #
+    #    # Retry
+    #    [localhost] TASK: Download from wrong URL (debug)> redo
+    #
+    # 4. When backup task fails:
+    #
+    #    [localhost] TASK: Create backup with wrong source (debug)> p result
+    #    (shows error about source file not existing)
+    #
+    #    # Update the command to use existing file
+    #    [localhost] TASK: Create backup with wrong source (debug)> task.args['_raw_params'] = 'cp /tmp/test.conf /tmp/backups/backup.conf'
+    #
+    #    # Retry
+    #    [localhost] TASK: Create backup with wrong source (debug)> redo
+    #
+    # 5. Continue:
+    #    [localhost] TASK: task_name (debug)> c

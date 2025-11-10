@@ -1,0 +1,426 @@
+---
+# =============================================================================
+# Configure Nginx Web Servers with PHP Application
+# =============================================================================
+# Description: Installs Nginx, PHP, and deploys web application
+#
+# Prerequisites:
+#   - Web server VMs provisioned
+#   - Database configured
+#   - Inventory file exists
+#
+# Usage:
+#   ansible-playbook 05-configure-webservers.yml -i inventories/production/hosts
+# =============================================================================
+
+- name: Configure Nginx Web Servers
+  hosts: webservers
+  become: true
+  gather_facts: true
+  
+  vars:
+    app_port: 80
+    db_host: "{{ hostvars[groups['databases'][0]]['ansible_host'] }}"
+    db_name: webapp_db
+    db_user: webapp_user
+    db_password: "WebAppDBPassword123!"  # In production, use ansible-vault
+    app_dir: /var/www/webapp
+
+  tasks:
+    # =========================================================================
+    # PHASE 1: Install Web Stack
+    # =========================================================================
+    
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install Nginx and PHP packages
+      apt:
+        name:
+          - nginx
+          - php-fpm
+          - php-pgsql
+          - php-json
+          - php-mbstring
+          - php-xml
+          - php-curl
+        state: present
+
+    # =========================================================================
+    # PHASE 2: Create Application
+    # =========================================================================
+
+    - name: Create web application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Deploy PHP application
+      copy:
+        dest: "{{ app_dir }}/index.php"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+        content: |
+          <?php
+          // Database connection configuration
+          $host = "{{ db_host }}";
+          $dbname = "{{ db_name }}";
+          $user = "{{ db_user }}";
+          $password = "{{ db_password }}";
+          
+          $server_name = gethostname();
+          $server_ip = $_SERVER['SERVER_ADDR'];
+          $client_ip = $_SERVER['REMOTE_ADDR'];
+          
+          // Try to connect to database
+          try {
+              $pdo = new PDO("pgsql:host=$host;dbname=$dbname", $user, $password);
+              $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+              
+              // Record visit
+              $stmt = $pdo->prepare("INSERT INTO visits (server_name, ip_address) VALUES (?, ?)");
+              $stmt->execute([$server_name, $client_ip]);
+              
+              // Get visit count
+              $stmt = $pdo->query("SELECT COUNT(*) as count FROM visits");
+              $visit_count = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
+              
+              // Get recent visits
+              $stmt = $pdo->query("SELECT * FROM visits ORDER BY visit_time DESC LIMIT 10");
+              $recent_visits = $stmt->fetchAll(PDO::FETCH_ASSOC);
+              
+              $db_status = "✅ Connected";
+              $db_color = "green";
+          } catch (PDOException $e) {
+              $db_status = "❌ Connection Failed: " . $e->getMessage();
+              $db_color = "red";
+              $visit_count = 0;
+              $recent_visits = [];
+          }
+          ?>
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Three-Tier Web Application</title>
+              <style>
+                  * { margin: 0; padding: 0; box-sizing: border-box; }
+                  body {
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      min-height: 100vh;
+                      padding: 20px;
+                  }
+                  .container {
+                      max-width: 1200px;
+                      margin: 0 auto;
+                      background: white;
+                      border-radius: 10px;
+                      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                      padding: 40px;
+                  }
+                  h1 {
+                      color: #667eea;
+                      text-align: center;
+                      margin-bottom: 30px;
+                      font-size: 2.5em;
+                  }
+                  .info-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                      gap: 20px;
+                      margin-bottom: 30px;
+                  }
+                  .info-card {
+                      background: #f7f7f7;
+                      padding: 20px;
+                      border-radius: 8px;
+                      border-left: 4px solid #667eea;
+                  }
+                  .info-card h3 {
+                      color: #333;
+                      margin-bottom: 15px;
+                      font-size: 1.2em;
+                  }
+                  .info-item {
+                      margin: 10px 0;
+                      padding: 8px;
+                      background: white;
+                      border-radius: 4px;
+                  }
+                  .info-item strong {
+                      color: #667eea;
+                      display: inline-block;
+                      min-width: 120px;
+                  }
+                  .status {
+                      font-weight: bold;
+                      padding: 5px 10px;
+                      border-radius: 4px;
+                      display: inline-block;
+                  }
+                  .status.success { background: #d4edda; color: #155724; }
+                  .status.error { background: #f8d7da; color: #721c24; }
+                  .visits-table {
+                      width: 100%;
+                      border-collapse: collapse;
+                      margin-top: 20px;
+                  }
+                  .visits-table th {
+                      background: #667eea;
+                      color: white;
+                      padding: 12px;
+                      text-align: left;
+                  }
+                  .visits-table td {
+                      padding: 10px;
+                      border-bottom: 1px solid #ddd;
+                  }
+                  .visits-table tr:hover {
+                      background: #f5f5f5;
+                  }
+                  .counter {
+                      background: #667eea;
+                      color: white;
+                      padding: 20px;
+                      border-radius: 8px;
+                      text-align: center;
+                      font-size: 1.5em;
+                      margin: 20px 0;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🚀 Three-Tier Web Application</h1>
+                  
+                  <div class="info-grid">
+                      <div class="info-card">
+                          <h3>🖥️ Server Information</h3>
+                          <div class="info-item">
+                              <strong>Server Name:</strong> <?php echo htmlspecialchars($server_name); ?>
+                          </div>
+                          <div class="info-item">
+                              <strong>Server IP:</strong> <?php echo htmlspecialchars($server_ip); ?>
+                          </div>
+                          <div class="info-item">
+                              <strong>Your IP:</strong> <?php echo htmlspecialchars($client_ip); ?>
+                          </div>
+                          <div class="info-item">
+                              <strong>Timestamp:</strong> <?php echo date('Y-m-d H:i:s'); ?>
+                          </div>
+                      </div>
+                      
+                      <div class="info-card">
+                          <h3>💾 Database Connection</h3>
+                          <div class="info-item">
+                              <strong>Status:</strong>
+                              <span class="status <?php echo $db_color == 'green' ? 'success' : 'error'; ?>">
+                                  <?php echo $db_status; ?>
+                              </span>
+                          </div>
+                          <div class="info-item">
+                              <strong>Database Host:</strong> <?php echo htmlspecialchars($host); ?>
+                          </div>
+                          <div class="info-item">
+                              <strong>Database Name:</strong> <?php echo htmlspecialchars($dbname); ?>
+                          </div>
+                          <div class="info-item">
+                              <strong>PHP Version:</strong> <?php echo phpversion(); ?>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <?php if ($db_color == 'green'): ?>
+                  <div class="counter">
+                      📊 Total Visits: <?php echo number_format($visit_count); ?>
+                  </div>
+                  
+                  <div class="info-card">
+                      <h3>📝 Recent Visits</h3>
+                      <table class="visits-table">
+                          <thead>
+                              <tr>
+                                  <th>ID</th>
+                                  <th>Server</th>
+                                  <th>IP Address</th>
+                                  <th>Time</th>
+                              </tr>
+                          </thead>
+                          <tbody>
+                              <?php foreach ($recent_visits as $visit): ?>
+                              <tr>
+                                  <td><?php echo htmlspecialchars($visit['id']); ?></td>
+                                  <td><?php echo htmlspecialchars($visit['server_name']); ?></td>
+                                  <td><?php echo htmlspecialchars($visit['ip_address']); ?></td>
+                                  <td><?php echo htmlspecialchars($visit['visit_time']); ?></td>
+                              </tr>
+                              <?php endforeach; ?>
+                          </tbody>
+                      </table>
+                  </div>
+                  <?php endif; ?>
+              </div>
+          </body>
+          </html>
+
+    - name: Create health check endpoint
+      copy:
+        dest: "{{ app_dir }}/health.php"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+        content: |
+          <?php
+          header('Content-Type: text/plain');
+          echo "OK\n";
+          exit(0);
+
+    # =========================================================================
+    # PHASE 3: Configure Nginx
+    # =========================================================================
+
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Configure Nginx virtual host
+      copy:
+        dest: /etc/nginx/sites-available/webapp
+        mode: '0644'
+        content: |
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+              
+              server_name _;
+              root {{ app_dir }};
+              index index.php index.html;
+              
+              # Logging
+              access_log /var/log/nginx/webapp-access.log;
+              error_log /var/log/nginx/webapp-error.log;
+              
+              location / {
+                  try_files $uri $uri/ =404;
+              }
+              
+              location ~ \.php$ {
+                  include snippets/fastcgi-php.conf;
+                  fastcgi_pass unix:/var/run/php/php-fpm.sock;
+                  fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                  include fastcgi_params;
+              }
+              
+              location = /health {
+                  access_log off;
+                  include snippets/fastcgi-php.conf;
+                  fastcgi_pass unix:/var/run/php/php-fpm.sock;
+                  fastcgi_param SCRIPT_FILENAME $document_root/health.php;
+                  include fastcgi_params;
+              }
+              
+              location ~ /\.ht {
+                  deny all;
+              }
+          }
+      notify: restart nginx
+
+    - name: Enable webapp site
+      file:
+        src: /etc/nginx/sites-available/webapp
+        dest: /etc/nginx/sites-enabled/webapp
+        state: link
+      notify: restart nginx
+
+    - name: Test Nginx configuration
+      command: nginx -t
+      register: nginx_test
+      changed_when: false
+
+    # =========================================================================
+    # PHASE 4: Start Services
+    # =========================================================================
+
+    - name: Ensure PHP-FPM is running
+      systemd:
+        name: "php{{ ansible_facts['distribution_version'] is version('22.04', '>=') | ternary('8.1', '7.4') }}-fpm"
+        state: started
+        enabled: true
+
+    - name: Ensure Nginx is running
+      systemd:
+        name: nginx
+        state: started
+        enabled: true
+
+    # =========================================================================
+    # PHASE 5: Firewall Configuration
+    # =========================================================================
+
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Allow SSH
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Allow HTTP
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: Allow HTTPS
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+
+    # =========================================================================
+    # PHASE 6: Verification
+    # =========================================================================
+
+    - name: Test web server health endpoint
+      uri:
+        url: "http://localhost/health"
+        return_content: true
+      register: health_check
+      ignore_errors: true
+
+    - name: Display configuration status
+      debug:
+        msg: |
+          Web Server Configuration Complete!
+          Server: {{ inventory_hostname }}
+          IP: {{ ansible_default_ipv4.address }}
+          Application: {{ app_dir }}
+          Health Check: {{ 'OK' if health_check.status == 200 else 'Failed' }}
+          Access: http://{{ ansible_default_ipv4.address }}
+
+  handlers:
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+
+    - name: restart php-fpm
+      systemd:
+        name: "php{{ ansible_facts['distribution_version'] is version('22.04', '>=') | ternary('8.1', '7.4') }}-fpm"
+        state: restarted

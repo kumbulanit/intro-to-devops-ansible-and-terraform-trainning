@@ -1,0 +1,185 @@
+---
+# =============================================================================
+# Configure PostgreSQL Database Server
+# =============================================================================
+# Description: Installs and configures PostgreSQL database for web application
+#
+# Prerequisites:
+#   - Database VM provisioned
+#   - Inventory file exists
+#   - SSH access configured
+#
+# Usage:
+#   ansible-playbook 04-configure-database.yml -i inventories/production/hosts
+# =============================================================================
+
+- name: Configure PostgreSQL Database Server
+  hosts: databases
+  become: true
+  gather_facts: true
+  
+  vars:
+    postgres_version: 14
+    db_name: webapp_db
+    db_user: webapp_user
+    db_password: "WebAppDBPassword123!"  # In production, use ansible-vault
+    
+  tasks:
+    # =========================================================================
+    # PHASE 1: System Preparation
+    # =========================================================================
+    
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install PostgreSQL and dependencies
+      apt:
+        name:
+          - postgresql-{{ postgres_version }}
+          - postgresql-contrib-{{ postgres_version }}
+          - python3-psycopg2
+          - python3-pip
+        state: present
+
+    # =========================================================================
+    # PHASE 2: PostgreSQL Configuration
+    # =========================================================================
+
+    - name: Ensure PostgreSQL is running
+      systemd:
+        name: postgresql
+        state: started
+        enabled: true
+
+    - name: Configure PostgreSQL to listen on all interfaces
+      lineinfile:
+        path: /etc/postgresql/{{ postgres_version }}/main/postgresql.conf
+        regexp: '^#?listen_addresses'
+        line: "listen_addresses = '*'"
+        backup: true
+      notify: restart postgresql
+
+    - name: Configure PostgreSQL authentication for network access
+      lineinfile:
+        path: /etc/postgresql/{{ postgres_version }}/main/pg_hba.conf
+        line: "host    all             all             10.0.0.0/8            md5"
+        backup: true
+      notify: restart postgresql
+
+    - name: Flush handlers to restart PostgreSQL
+      meta: flush_handlers
+
+    # =========================================================================
+    # PHASE 3: Database and User Creation
+    # =========================================================================
+
+    - name: Create application database
+      become_user: postgres
+      postgresql_db:
+        name: "{{ db_name }}"
+        state: present
+
+    - name: Create database user
+      become_user: postgres
+      postgresql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        db: "{{ db_name }}"
+        priv: ALL
+        state: present
+
+    - name: Grant all privileges on database
+      become_user: postgres
+      postgresql_user:
+        name: "{{ db_user }}"
+        db: "{{ db_name }}"
+        priv: "ALL"
+        role_attr_flags: CREATEDB
+
+    # =========================================================================
+    # PHASE 4: Create Sample Schema
+    # =========================================================================
+
+    - name: Create sample table
+      become_user: postgres
+      postgresql_query:
+        db: "{{ db_name }}"
+        query: |
+          CREATE TABLE IF NOT EXISTS visits (
+            id SERIAL PRIMARY KEY,
+            server_name VARCHAR(255),
+            visit_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ip_address VARCHAR(45)
+          );
+
+    # =========================================================================
+    # PHASE 5: Firewall Configuration
+    # =========================================================================
+
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Allow SSH
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Allow PostgreSQL from private network
+      ufw:
+        rule: allow
+        port: '5432'
+        proto: tcp
+        from_ip: 10.0.0.0/8
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+
+    # =========================================================================
+    # PHASE 6: Verification
+    # =========================================================================
+
+    - name: Verify PostgreSQL is listening
+      command: netstat -tuln | grep 5432
+      register: postgres_port
+      changed_when: false
+      ignore_errors: true
+
+    - name: Display PostgreSQL status
+      debug:
+        msg: |
+          PostgreSQL Configuration Complete!
+          Database: {{ db_name }}
+          User: {{ db_user }}
+          Port: 5432
+          Listening: {{ 'Yes' if postgres_port.rc == 0 else 'Check logs' }}
+
+    - name: Save database connection info
+      copy:
+        dest: /root/database-info.txt
+        mode: '0600'
+        content: |
+          Database Connection Information
+          ===============================
+          Host: {{ ansible_default_ipv4.address }}
+          Port: 5432
+          Database: {{ db_name }}
+          Username: {{ db_user }}
+          Password: {{ db_password }}
+          
+          Connection String:
+          postgresql://{{ db_user }}:{{ db_password }}@{{ ansible_default_ipv4.address }}:5432/{{ db_name }}
+          
+          Test Connection:
+          psql -h {{ ansible_default_ipv4.address }} -U {{ db_user }} -d {{ db_name }}
+
+  handlers:
+    - name: restart postgresql
+      systemd:
+        name: postgresql
+        state: restarted

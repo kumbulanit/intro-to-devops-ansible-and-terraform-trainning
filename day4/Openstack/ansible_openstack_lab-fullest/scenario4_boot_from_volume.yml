@@ -86,9 +86,27 @@
       cloud: "{{ cloud_name }}"
       name: "{{ volume_name }}"
     register: volume_info
-    until: volume_info.volumes[0].status == 'available'
+    until:
+    - volume_info.volumes | length > 0
+    - volume_info.volumes[0].status in ['available', 'in-use', 'error']
     retries: 30
     delay: 5
+    failed_when: volume_info.volumes[0].status == 'error'
+
+  - name: Ensure volume boot flag is set
+    command: "openstack volume set --bootable {{ volume_name }}"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+
+  - name: Display volume details
+    debug:
+      msg: |
+        Volume ready:
+          Name: {{ volume_info.volumes[0].name }}
+          ID: {{ volume_info.volumes[0].id }}
+          Status: {{ volume_info.volumes[0].status }}
+          Bootable: {{ volume_info.volumes[0].is_bootable }}
 
   - name: Launch VM from volume
     openstack.cloud.server:

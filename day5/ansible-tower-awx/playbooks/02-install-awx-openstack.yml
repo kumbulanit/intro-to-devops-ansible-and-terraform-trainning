@@ -1,0 +1,856 @@
+---
+# =============================================================================
+# AWX Installation on OpenStack VM with Complete Automation
+# =============================================================================
+# Description: This playbook provisions an OpenStack VM and installs AWX
+#              with all necessary configurations including security groups,
+#              networking, and floating IP assignment.
+#
+# Prerequisites:
+#   - OpenStack environment accessible
+#   - clouds.yaml configured at ~/.config/openstack/clouds.yaml
+#   - SSH key pair created (default: ~/.ssh/id_rsa)
+#   - openstacksdk installed: pip3 install openstacksdk
+#   - openstack.cloud collection: ansible-galaxy collection install openstack.cloud
+#   - Available quota: 1 VM, 4 vCPUs, 8GB RAM, 1 Floating IP
+#
+# Usage:
+#   ansible-playbook 02-install-awx-openstack.yml \
+#     -e "cloud_name=mycloud" \
+#     -e "openstack_key_name=my-keypair"
+#
+# =============================================================================
+
+- name: Provision OpenStack VM for AWX
+  hosts: localhost
+  gather_facts: true
+  
+  vars:
+    # OpenStack Configuration
+    cloud_name: "{{ lookup('env', 'OS_CLOUD') | default('devstack', true) }}"
+    
+    # VM Configuration
+    vm_name: awx-server
+    vm_flavor: m1.large              # 4 vCPU, 8GB RAM
+    vm_image: ubuntu-22.04           # Ubuntu 22.04 LTS
+    openstack_key_name: my-keypair   # Your SSH keypair name in OpenStack
+    network_name: private
+    floating_ip_pool: public
+    
+    # Security Group
+    security_group_name: awx-security-group
+    
+    # AWX Configuration
+    awx_version: "23.5.0"
+    awx_admin_password: "SecureAWXPassword123!"
+    awx_install_dir: /opt/awx
+    postgres_password: "PostgresDBPassword123!"
+    
+    # SSH Configuration
+    ssh_private_key: "{{ lookup('env', 'HOME') }}/.ssh/id_rsa"
+    ansible_user: ubuntu
+
+  tasks:
+    # =========================================================================
+    # PHASE 1: Verify Prerequisites
+    # =========================================================================
+    
+    - name: Check if clouds.yaml exists
+      stat:
+        path: "{{ lookup('env', 'HOME') }}/.config/openstack/clouds.yaml"
+      register: clouds_yaml
+      failed_when: not clouds_yaml.stat.exists
+      delegate_to: localhost
+
+    - name: Verify SSH key exists
+      stat:
+        path: "{{ ssh_private_key }}"
+      register: ssh_key_check
+      failed_when: not ssh_key_check.stat.exists
+      delegate_to: localhost
+
+    - name: Display configuration
+      debug:
+        msg: |
+          OpenStack Cloud: {{ cloud_name }}
+          VM Name: {{ vm_name }}
+          Flavor: {{ vm_flavor }}
+          Image: {{ vm_image }}
+          Network: {{ network_name }}
+          SSH Key: {{ openstack_key_name }}
+
+    # =========================================================================
+    # PHASE 2: Create Security Group and Rules
+    # =========================================================================
+
+    - name: Create security group for AWX
+      openstack.cloud.security_group:
+        cloud: "{{ cloud_name }}"
+        name: "{{ security_group_name }}"
+        description: "Security group for AWX automation server"
+        state: present
+      register: awx_sg
+
+    - name: Add SSH access rule
+      openstack.cloud.security_group_rule:
+        cloud: "{{ cloud_name }}"
+        security_group: "{{ security_group_name }}"
+        protocol: tcp
+        port_range_min: 22
+        port_range_max: 22
+        remote_ip_prefix: "0.0.0.0/0"
+        state: present
+      ignore_errors: true
+
+    - name: Add HTTP access rule
+      openstack.cloud.security_group_rule:
+        cloud: "{{ cloud_name }}"
+        security_group: "{{ security_group_name }}"
+        protocol: tcp
+        port_range_min: 80
+        port_range_max: 80
+        remote_ip_prefix: "0.0.0.0/0"
+        state: present
+      ignore_errors: true
+
+    - name: Add HTTPS access rule
+      openstack.cloud.security_group_rule:
+        cloud: "{{ cloud_name }}"
+        security_group: "{{ security_group_name }}"
+        protocol: tcp
+        port_range_min: 443
+        port_range_max: 443
+        remote_ip_prefix: "0.0.0.0/0"
+        state: present
+      ignore_errors: true
+
+    - name: Add AWX web interface access rule
+      openstack.cloud.security_group_rule:
+        cloud: "{{ cloud_name }}"
+        security_group: "{{ security_group_name }}"
+        protocol: tcp
+        port_range_min: 8080
+        port_range_max: 8080
+        remote_ip_prefix: "0.0.0.0/0"
+        state: present
+      ignore_errors: true
+
+    - name: Add ICMP (ping) rule
+      openstack.cloud.security_group_rule:
+        cloud: "{{ cloud_name }}"
+        security_group: "{{ security_group_name }}"
+        protocol: icmp
+        state: present
+      ignore_errors: true
+
+    # =========================================================================
+    # PHASE 3: Create/Verify SSH Keypair in OpenStack
+    # =========================================================================
+
+    - name: Create/Import SSH keypair to OpenStack
+      openstack.cloud.keypair:
+        cloud: "{{ cloud_name }}"
+        name: "{{ openstack_key_name }}"
+        public_key_file: "{{ ssh_private_key }}.pub"
+        state: present
+
+    # =========================================================================
+    # PHASE 4: Launch AWX VM Instance
+    # =========================================================================
+
+    - name: Launch AWX VM on OpenStack
+      openstack.cloud.server:
+        cloud: "{{ cloud_name }}"
+        name: "{{ vm_name }}"
+        flavor: "{{ vm_flavor }}"
+        image: "{{ vm_image }}"
+        key_name: "{{ openstack_key_name }}"
+        network: "{{ network_name }}"
+        security_groups:
+          - "{{ security_group_name }}"
+          - default
+        auto_ip: false  # We'll manually assign floating IP
+        wait: true
+        timeout: 600
+        meta:
+          role: awx
+          environment: production
+          managed_by: ansible
+        state: present
+      register: awx_vm
+
+    - name: Display VM creation info
+      debug:
+        msg: |
+          VM Created Successfully!
+          Name: {{ awx_vm.server.name }}
+          ID: {{ awx_vm.server.id }}
+          Private IP: {{ awx_vm.server.private_v4 }}
+          Status: {{ awx_vm.server.status }}
+
+    # =========================================================================
+    # PHASE 5: Allocate and Assign Floating IP
+    # =========================================================================
+
+    - name: Allocate floating IP to AWX VM
+      openstack.cloud.floating_ip:
+        cloud: "{{ cloud_name }}"
+        server: "{{ vm_name }}"
+        network: "{{ floating_ip_pool }}"
+        wait: true
+        timeout: 180
+        state: present
+      register: awx_floating_ip
+
+    - name: Display floating IP information
+      debug:
+        msg: |
+          Floating IP Assigned: {{ awx_floating_ip.floating_ip.floating_ip_address }}
+          Fixed IP: {{ awx_floating_ip.floating_ip.fixed_ip_address }}
+          Port: {{ awx_floating_ip.floating_ip.port }}
+
+    # =========================================================================
+    # PHASE 6: Wait for VM to be Accessible
+    # =========================================================================
+
+    - name: Wait for SSH to be available on VM
+      wait_for:
+        host: "{{ awx_floating_ip.floating_ip.floating_ip_address }}"
+        port: 22
+        delay: 10
+        timeout: 300
+        state: started
+        connect_timeout: 5
+      delegate_to: localhost
+
+    - name: Add AWX VM to in-memory inventory
+      add_host:
+        name: awx-vm
+        ansible_host: "{{ awx_floating_ip.floating_ip.floating_ip_address }}"
+        ansible_user: "{{ ansible_user }}"
+        ansible_ssh_private_key_file: "{{ ssh_private_key }}"
+        ansible_python_interpreter: /usr/bin/python3
+        ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+        groups: awx_servers
+        awx_private_ip: "{{ awx_vm.server.private_v4 }}"
+        awx_public_ip: "{{ awx_floating_ip.floating_ip.floating_ip_address }}"
+
+    - name: Wait for cloud-init to complete
+      pause:
+        seconds: 30
+        prompt: "Waiting for cloud-init to complete on VM..."
+
+    # =========================================================================
+    # PHASE 7: Save VM Information
+    # =========================================================================
+
+    - name: Save AWX VM information to file
+      copy:
+        dest: "./awx-openstack-vm-info.txt"
+        mode: '0600'
+        content: |
+          =====================================
+          AWX OpenStack VM Information
+          =====================================
+          
+          VM Details:
+          -----------
+          Name: {{ awx_vm.server.name }}
+          ID: {{ awx_vm.server.id }}
+          Status: {{ awx_vm.server.status }}
+          
+          Network Information:
+          --------------------
+          Private IP: {{ awx_vm.server.private_v4 }}
+          Public IP (Floating): {{ awx_floating_ip.floating_ip.floating_ip_address }}
+          
+          SSH Access:
+          -----------
+          ssh {{ ansible_user }}@{{ awx_floating_ip.floating_ip.floating_ip_address }}
+          ssh -i {{ ssh_private_key }} {{ ansible_user }}@{{ awx_floating_ip.floating_ip.floating_ip_address }}
+          
+          AWX URL (after installation):
+          -----------------------------
+          http://{{ awx_floating_ip.floating_ip.floating_ip_address }}:8080
+          
+          OpenStack Details:
+          ------------------
+          Cloud: {{ cloud_name }}
+          Flavor: {{ vm_flavor }}
+          Image: {{ vm_image }}
+          Security Group: {{ security_group_name }}
+          SSH Key: {{ openstack_key_name }}
+          
+          =====================================
+      delegate_to: localhost
+
+    - name: Display VM access information
+      debug:
+        msg: |
+          ========================================
+          VM Provisioning Complete!
+          ========================================
+          
+          SSH Access: ssh {{ ansible_user }}@{{ awx_floating_ip.floating_ip.floating_ip_address }}
+          Public IP: {{ awx_floating_ip.floating_ip.floating_ip_address }}
+          Private IP: {{ awx_vm.server.private_v4 }}
+          
+          VM info saved to: ./awx-openstack-vm-info.txt
+          
+          Next: AWX installation will begin...
+          ========================================
+
+
+# =============================================================================
+# PART 2: Install and Configure AWX on the OpenStack VM
+# =============================================================================
+
+- name: Install AWX on OpenStack VM
+  hosts: awx_servers
+  become: true
+  gather_facts: true
+  
+  vars:
+    awx_version: "23.5.0"
+    awx_admin_password: "SecureAWXPassword123!"
+    awx_install_dir: /opt/awx
+    postgres_password: "PostgresDBPassword123!"
+
+  tasks:
+    # =========================================================================
+    # PHASE 1: System Preparation
+    # =========================================================================
+
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Upgrade all packages
+      apt:
+        upgrade: dist
+        update_cache: true
+      when: false  # Set to true if you want full system upgrade
+
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - python3-pip
+          - python3-setuptools
+          - python3-docker
+          - git
+          - vim
+          - htop
+          - net-tools
+        state: present
+
+    - name: Install Python Docker module
+      pip:
+        name:
+          - docker
+          - docker-compose
+        state: present
+
+    # =========================================================================
+    # PHASE 2: Docker Installation
+    # =========================================================================
+
+    - name: Remove old Docker versions
+      apt:
+        name:
+          - docker
+          - docker-engine
+          - docker.io
+          - containerd
+          - runc
+        state: absent
+
+    - name: Create keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        keyring: /etc/apt/keyrings/docker.gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: Install Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Install docker-compose standalone
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-Linux-x86_64"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: true
+
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Display Docker version
+      debug:
+        msg: "Docker installed: {{ docker_version.stdout }}"
+
+    # =========================================================================
+    # PHASE 3: Configure Firewall (UFW)
+    # =========================================================================
+
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Allow SSH through firewall
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Allow HTTP through firewall
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: Allow HTTPS through firewall
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+
+    - name: Allow AWX web interface through firewall
+      ufw:
+        rule: allow
+        port: '8080'
+        proto: tcp
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+
+    # =========================================================================
+    # PHASE 4: AWX Installation
+    # =========================================================================
+
+    - name: Create AWX installation directory
+      file:
+        path: "{{ awx_install_dir }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Create docker-compose.yml for AWX
+      copy:
+        dest: "{{ awx_install_dir }}/docker-compose.yml"
+        mode: '0644'
+        content: |
+          version: '3.8'
+          
+          services:
+            postgres:
+              image: postgres:13
+              container_name: awx-postgres
+              hostname: postgres
+              environment:
+                POSTGRES_DB: awx
+                POSTGRES_USER: awx
+                POSTGRES_PASSWORD: {{ postgres_password }}
+                PGDATA: /var/lib/postgresql/data/pgdata
+              volumes:
+                - postgres-data:/var/lib/postgresql/data/pgdata
+              networks:
+                - awx-network
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U awx"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+          
+            redis:
+              image: redis:7
+              container_name: awx-redis
+              hostname: redis
+              networks:
+                - awx-network
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "redis-cli", "ping"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+          
+            awx-web:
+              image: quay.io/ansible/awx:{{ awx_version }}
+              container_name: awx-web
+              hostname: awx-web
+              user: root
+              environment:
+                DATABASE_HOST: postgres
+                DATABASE_PORT: 5432
+                DATABASE_NAME: awx
+                DATABASE_USER: awx
+                DATABASE_PASSWORD: {{ postgres_password }}
+                REDIS_HOST: redis
+                REDIS_PORT: 6379
+                AWX_ADMIN_USER: admin
+                AWX_ADMIN_PASSWORD: {{ awx_admin_password }}
+              volumes:
+                - awx-projects:/var/lib/awx/projects
+                - awx-rsyslog:/var/lib/awx/rsyslog
+              ports:
+                - "8080:8052"
+              networks:
+                - awx-network
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                redis:
+                  condition: service_healthy
+              command: >
+                bash -c "
+                awx-manage migrate --noinput &&
+                awx-manage create_preload_data &&
+                awx-manage provision_instance --hostname=awx-web &&
+                awx-manage register_queue --queuename=default --hostnames=awx-web &&
+                supervisord -c /etc/supervisord.conf
+                "
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:8052/api/v2/ping/"]
+                interval: 30s
+                timeout: 10s
+                retries: 10
+                start_period: 120s
+          
+            awx-task:
+              image: quay.io/ansible/awx:{{ awx_version }}
+              container_name: awx-task
+              hostname: awx-task
+              user: root
+              environment:
+                DATABASE_HOST: postgres
+                DATABASE_PORT: 5432
+                DATABASE_NAME: awx
+                DATABASE_USER: awx
+                DATABASE_PASSWORD: {{ postgres_password }}
+                REDIS_HOST: redis
+                REDIS_PORT: 6379
+              volumes:
+                - awx-projects:/var/lib/awx/projects
+                - awx-rsyslog:/var/lib/awx/rsyslog
+              networks:
+                - awx-network
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                redis:
+                  condition: service_healthy
+                awx-web:
+                  condition: service_started
+              command: >
+                bash -c "
+                awx-manage provision_instance --hostname=awx-task &&
+                awx-manage register_queue --queuename=default --hostnames=awx-task &&
+                supervisord -c /etc/supervisord.conf
+                "
+              restart: unless-stopped
+          
+          volumes:
+            postgres-data:
+            awx-projects:
+            awx-rsyslog:
+          
+          networks:
+            awx-network:
+              driver: bridge
+
+    - name: Create systemd service for AWX
+      copy:
+        dest: /etc/systemd/system/awx.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=AWX Automation Platform
+          Requires=docker.service
+          After=docker.service
+          
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          WorkingDirectory={{ awx_install_dir }}
+          ExecStart=/usr/local/bin/docker-compose up -d
+          ExecStop=/usr/local/bin/docker-compose down
+          TimeoutStartSec=0
+          
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: true
+
+    # =========================================================================
+    # PHASE 5: Start AWX Services
+    # =========================================================================
+
+    - name: Pull Docker images for AWX
+      command: docker-compose pull
+      args:
+        chdir: "{{ awx_install_dir }}"
+      environment:
+        DOCKER_CLIENT_TIMEOUT: "300"
+        COMPOSE_HTTP_TIMEOUT: "300"
+
+    - name: Start AWX containers
+      command: docker-compose up -d
+      args:
+        chdir: "{{ awx_install_dir }}"
+      environment:
+        DOCKER_CLIENT_TIMEOUT: "300"
+        COMPOSE_HTTP_TIMEOUT: "300"
+
+    - name: Enable AWX service
+      systemd:
+        name: awx
+        enabled: true
+
+    - name: Wait for AWX to be ready (this may take 5-10 minutes)
+      uri:
+        url: "http://localhost:8080/api/v2/ping/"
+        status_code: 200
+        timeout: 10
+      register: result
+      until: result.status == 200
+      retries: 60
+      delay: 10
+      ignore_errors: true
+
+    # =========================================================================
+    # PHASE 6: Post-Installation Configuration
+    # =========================================================================
+
+    - name: Create management scripts directory
+      file:
+        path: /usr/local/bin/awx-tools
+        state: directory
+        mode: '0755'
+
+    - name: Create AWX management script
+      copy:
+        dest: /usr/local/bin/awx-manage.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          # AWX Management Script
+          
+          AWX_DIR="{{ awx_install_dir }}"
+          
+          case "$1" in
+            start)
+              echo "Starting AWX..."
+              cd $AWX_DIR && docker-compose up -d
+              ;;
+            stop)
+              echo "Stopping AWX..."
+              cd $AWX_DIR && docker-compose down
+              ;;
+            restart)
+              echo "Restarting AWX..."
+              cd $AWX_DIR && docker-compose restart
+              ;;
+            status)
+              echo "AWX Container Status:"
+              docker ps --filter "name=awx"
+              ;;
+            logs)
+              echo "AWX Logs (Ctrl+C to exit):"
+              docker logs -f awx-web
+              ;;
+            backup)
+              BACKUP_DIR="/var/backups/awx"
+              mkdir -p $BACKUP_DIR
+              BACKUP_FILE="$BACKUP_DIR/awx-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+              echo "Creating backup: $BACKUP_FILE"
+              docker exec awx-postgres pg_dump -U awx awx > /tmp/awx-db-backup.sql
+              tar -czf $BACKUP_FILE /tmp/awx-db-backup.sql $AWX_DIR
+              rm /tmp/awx-db-backup.sql
+              echo "Backup complete: $BACKUP_FILE"
+              ;;
+            *)
+              echo "Usage: $0 {start|stop|restart|status|logs|backup}"
+              exit 1
+              ;;
+          esac
+
+    - name: Save AWX access information
+      copy:
+        dest: "{{ awx_install_dir }}/AWX_ACCESS_INFO.txt"
+        mode: '0600'
+        content: |
+          =====================================
+          AWX Installation Complete!
+          =====================================
+          
+          Access Information:
+          -------------------
+          URL: http://{{ hostvars['awx-vm']['awx_public_ip'] }}:8080
+          Username: admin
+          Password: {{ awx_admin_password }}
+          
+          Server Information:
+          -------------------
+          Public IP: {{ hostvars['awx-vm']['awx_public_ip'] }}
+          Private IP: {{ hostvars['awx-vm']['awx_private_ip'] }}
+          SSH: ssh ubuntu@{{ hostvars['awx-vm']['awx_public_ip'] }}
+          
+          Installation Directory: {{ awx_install_dir }}
+          
+          Management Commands:
+          --------------------
+          # Quick management
+          sudo awx-manage.sh {start|stop|restart|status|logs|backup}
+          
+          # Docker commands
+          sudo docker ps                          # List containers
+          sudo docker logs -f awx-web            # View web logs
+          sudo docker logs -f awx-task           # View task logs
+          
+          # Docker Compose commands
+          cd {{ awx_install_dir }}
+          sudo docker-compose ps                 # Container status
+          sudo docker-compose logs               # All logs
+          sudo docker-compose restart            # Restart all
+          
+          # System service
+          sudo systemctl status awx              # Service status
+          sudo systemctl start awx               # Start service
+          sudo systemctl stop awx                # Stop service
+          
+          Container Information:
+          ----------------------
+          - awx-web: Main web interface (port 8080)
+          - awx-task: Background task processor
+          - awx-postgres: PostgreSQL database
+          - awx-redis: Redis cache
+          
+          Data Volumes:
+          -------------
+          - postgres-data: Database files
+          - awx-projects: Ansible project files
+          - awx-rsyslog: Log files
+          
+          Troubleshooting:
+          ----------------
+          # Check if AWX is responding
+          curl http://localhost:8080/api/v2/ping/
+          
+          # Check container health
+          sudo docker ps -a
+          
+          # View all logs
+          cd {{ awx_install_dir }} && sudo docker-compose logs
+          
+          # Reset AWX (WARNING: Deletes all data)
+          cd {{ awx_install_dir }} && sudo docker-compose down -v
+          cd {{ awx_install_dir }} && sudo docker-compose up -d
+          
+          Backup:
+          -------
+          sudo awx-manage.sh backup
+          Backups stored in: /var/backups/awx/
+          
+          =====================================
+
+    - name: Create README in home directory
+      copy:
+        dest: /home/ubuntu/README-AWX.txt
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+        content: |
+          Welcome to your AWX Server!
+          ===========================
+          
+          Access AWX at: http://{{ hostvars['awx-vm']['awx_public_ip'] }}:8080
+          Username: admin
+          Password: {{ awx_admin_password }}
+          
+          Quick Commands:
+          ---------------
+          sudo awx-manage.sh status    # Check AWX status
+          sudo awx-manage.sh logs      # View AWX logs
+          sudo awx-manage.sh restart   # Restart AWX
+          sudo awx-manage.sh backup    # Backup AWX database
+          
+          Full documentation: {{ awx_install_dir }}/AWX_ACCESS_INFO.txt
+
+    # =========================================================================
+    # PHASE 7: Final Verification
+    # =========================================================================
+
+    - name: Get container status
+      command: docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+      register: container_status
+      changed_when: false
+
+    - name: Display container status
+      debug:
+        msg: "{{ container_status.stdout_lines }}"
+
+    - name: Display installation summary
+      debug:
+        msg: |
+          ========================================
+          AWX Installation Complete!
+          ========================================
+          
+          Access AWX at: http://{{ hostvars['awx-vm']['awx_public_ip'] }}:8080
+          Username: admin
+          Password: {{ awx_admin_password }}
+          
+          Server IP: {{ hostvars['awx-vm']['awx_public_ip'] }}
+          SSH Access: ssh ubuntu@{{ hostvars['awx-vm']['awx_public_ip'] }}
+          
+          Access info saved to: {{ awx_install_dir }}/AWX_ACCESS_INFO.txt
+          
+          Management: sudo awx-manage.sh {start|stop|restart|status|logs|backup}
+          
+          Note: If AWX is not yet accessible, wait a few more minutes
+          for all services to fully initialize.
+          ========================================

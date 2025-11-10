@@ -1,0 +1,100 @@
+---
+# Conditional Debugging Example
+# This playbook demonstrates selective debugging based on conditions
+
+- name: Conditional Debugging
+  hosts: webservers,dbservers
+  gather_facts: no
+  debugger: never # Default: no debugging
+
+  vars:
+    debug_mode: false # Set via -e "debug_mode=true"
+    debug_host: "web1" # Only debug this specific host
+    critical_task: false # Flag for critical operations
+
+  tasks:
+  - name: Task 1 - Normal execution
+    debug:
+      msg: "Running task 1 on {{ inventory_hostname }}"
+    # No debugging unless debug_mode is true
+
+  - name: Task 2 - Debug when flag is set
+    command: echo "Processing on {{ inventory_hostname }}"
+    register: process_result
+    debugger: "{{ 'always' if debug_mode else 'never' }}"
+    # Debug only when: -e "debug_mode=true"
+
+  - name: Task 3 - Debug specific host only
+    command: echo "Host-specific task on {{ inventory_hostname }}"
+    register: host_task
+    debugger: "{{ 'always' if inventory_hostname == debug_host else 'never' }}"
+    # Debug only when running on web1
+
+  - name: Task 4 - Debug critical operations
+    command: echo "Critical operation"
+    register: critical_result
+    vars:
+      critical_task: true
+    debugger: "{{ 'always' if critical_task else 'on_failed' }}"
+    # Debug always for critical tasks
+
+  - name: Task 5 - Conditional task with debugging
+    command: echo "Conditional execution"
+    when: inventory_hostname in groups['webservers']
+    debugger: "{{ 'always' if debug_mode and inventory_hostname in groups['webservers'] else 'never' }}"
+    # Complex condition: debug only for webservers when debug_mode is true
+
+  - name: Task 6 - Debug on failure only
+    command: /bin/false # This will fail
+    debugger: on_failed
+    ignore_errors: yes
+    # Always debugs failures, regardless of debug_mode
+
+  - name: Task 7 - Final summary
+    debug:
+      msg: "Completed on {{ inventory_hostname }}"
+
+# Usage examples:
+#
+# 1. Normal run (no debugging):
+#    ansible-playbook -i inventory.ini conditional-debugging.yml
+#
+# 2. Enable debug mode for all tasks with debugger: debug_mode:
+#    ansible-playbook -i inventory.ini conditional-debugging.yml -e "debug_mode=true"
+#
+# 3. Debug only specific host:
+#    ansible-playbook -i inventory.ini conditional-debugging.yml -e "debug_host=web1"
+#
+# 4. Debug different host:
+#    ansible-playbook -i inventory.ini conditional-debugging.yml -e "debug_host=db1" -e "debug_mode=true"
+#
+# 5. Limit to specific group and debug:
+#    ansible-playbook -i inventory.ini conditional-debugging.yml --limit webservers -e "debug_mode=true"
+#
+# Debug session examples:
+#
+# When debugging Task 2:
+#   [web1] TASK: Task 2 (debug)> p debug_mode
+#   True
+#   [web1] TASK: Task 2 (debug)> p inventory_hostname
+#   'web1'
+#   [web1] TASK: Task 2 (debug)> c
+#
+# When debugging Task 3 on web1:
+#   [web1] TASK: Task 3 (debug)> p inventory_hostname
+#   'web1'
+#   [web1] TASK: Task 3 (debug)> p debug_host
+#   'web1'
+#   [web1] TASK: Task 3 (debug)> p inventory_hostname == debug_host
+#   True
+#   [web1] TASK: Task 3 (debug)> c
+#
+# When debugging Task 4 (critical):
+#   [web1] TASK: Task 4 (debug)> p critical_task
+#   True
+#   [web1] TASK: Task 4 (debug)> c
+#
+# When Task 6 fails:
+#   [web1] TASK: Task 6 (debug)> p result
+#   {'rc': 1, 'failed': True, ...}
+#   [web1] TASK: Task 6 (debug)> c

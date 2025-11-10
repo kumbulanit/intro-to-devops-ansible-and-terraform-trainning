@@ -1,0 +1,96 @@
+---
+- name: Basic Block, Rescue, and Always Example
+  hosts: local
+  gather_facts: yes
+
+  vars:
+    test_mode: "success" # Change to "fail" to test rescue block
+
+  tasks:
+  - name: Demonstrate basic block structure
+    block:
+    - name: Task 1 - Always succeeds
+      debug:
+        msg: "✅ Task 1: This task will always succeed"
+
+    - name: Task 2 - Show system info
+      debug:
+        msg: |
+          Hostname: {{ ansible_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Python: {{ ansible_python_version }}
+
+    - name: Task 3 - Conditional failure
+      command: /bin/false
+      when: test_mode == "fail"
+      register: fail_task
+
+    - name: Task 4 - Only runs if no failure
+      debug:
+        msg: "✅ All previous tasks succeeded!"
+
+    rescue:
+    - name: Rescue task 1 - Catch the error
+      debug:
+        msg: |
+          ⚠️  RESCUE BLOCK ACTIVATED!
+          A task in the block failed.
+
+    - name: Rescue task 2 - Show error details
+      debug:
+        msg: |
+          Failed Task: {{ ansible_failed_task.name }}
+          Failed Action: {{ ansible_failed_task.action }}
+          Error Message: {{ ansible_failed_result.msg | default('No message') }}
+      when: ansible_failed_task is defined
+
+    - name: Rescue task 3 - Log the error
+      copy:
+        content: |
+          Error Log
+          =========
+          Time: {{ ansible_date_time.iso8601 }}
+          Failed Task: {{ ansible_failed_task.name | default('Unknown') }}
+          Host: {{ inventory_hostname }}
+        dest: /tmp/ansible_error_{{ ansible_date_time.epoch }}.log
+      delegate_to: localhost
+
+    - name: Rescue task 4 - Recovery action
+      debug:
+        msg: "✅ Error handled gracefully. System can continue."
+
+    always:
+    - name: Always task 1 - Show execution status
+      debug:
+        msg: |
+          Block execution completed
+          Status: {{ 'FAILED (but rescued)' if ansible_failed_task is defined else 'SUCCESS' }}
+
+    - name: Always task 2 - Cleanup notification
+      debug:
+        msg: "🧹 This always block would clean up resources"
+
+    - name: Always task 3 - Log execution
+      lineinfile:
+        path: /tmp/ansible_executions.log
+        line: "{{ ansible_date_time.iso8601 }} | {{ inventory_hostname }} | {{ 'RESCUED' if ansible_failed_task is defined else 'SUCCESS' }}"
+        create: yes
+      delegate_to: localhost
+
+  - name: Post-block task
+    debug:
+      msg: |
+        🎉 Playbook execution completed!
+        The rescue block prevented the playbook from failing.
+        Check /tmp/ansible_executions.log for execution history.
+
+# Run examples:
+#
+# Test success scenario:
+#   ansible-playbook -i inventory.ini basic-block.yml
+#
+# Test failure scenario:
+#   ansible-playbook -i inventory.ini basic-block.yml -e "test_mode=fail"
+#
+# View execution log:
+#   cat /tmp/ansible_executions.log

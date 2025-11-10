@@ -1,0 +1,57 @@
+# Ansible
+*.retry
+.ansible/
+*.log
+
+# Vault passwords
+.vault_pass*
+vault_password.txt
+vault.txt
+
+# Python
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+ENV/
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+
+# Terraform (if mixed with terraform)
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Sensitive files
+secrets/
+*.key
+*.pem
+*.crt
+credentials.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Cache and facts
+/tmp/ansible_facts/
+fact_cache/

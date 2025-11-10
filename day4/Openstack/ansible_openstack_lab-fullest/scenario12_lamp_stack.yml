@@ -110,6 +110,43 @@
     - "{{ web_volume }}"
     - "{{ db_volume }}"
 
+  - name: Wait for LAMP volumes to become available
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ item }}"
+    register: lamp_volume_wait
+    until:
+    - lamp_volume_wait.volumes | length > 0
+    - lamp_volume_wait.volumes[0].status in ['available', 'in-use', 'error']
+    retries: 30
+    delay: 5
+    failed_when: lamp_volume_wait.volumes[0].status == 'error'
+    loop:
+    - "{{ web_volume }}"
+    - "{{ db_volume }}"
+    loop_control:
+      label: "{{ item }}"
+
+  - name: Ensure bootable flag is set on LAMP volumes
+    command: "openstack volume set --bootable {{ item }}"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+    loop:
+    - "{{ web_volume }}"
+    - "{{ db_volume }}"
+    loop_control:
+      label: "{{ item }}"
+
+  - name: Show LAMP volume readiness details
+    debug:
+      msg: |
+        Volume {{ item.item }} ready:
+          ID: {{ item.volumes[0].id }}
+          Status: {{ item.volumes[0].status }}
+          Bootable: {{ item.volumes[0].is_bootable }}
+    loop: "{{ lamp_volume_wait.results }}"
+
   - name: Deploy Apache + PHP VM (Web Server)
     openstack.cloud.server:
       cloud: "{{ cloud_name }}"

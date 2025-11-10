@@ -1,0 +1,184 @@
+---
+# =============================================================================
+# Complete Three-Tier Application Stack Deployment
+# =============================================================================
+# Description: Master playbook that deploys entire three-tier application:
+#              1. Provisions OpenStack infrastructure
+#              2. Configures PostgreSQL database
+#              3. Configures Nginx web servers
+#              4. Configures HAProxy load balancer
+#
+# Prerequisites:
+#   - clouds.yaml configured
+#   - SSH keypair in OpenStack
+#   - Available OpenStack quota
+#
+# Usage:
+#   ansible-playbook 07-deploy-complete-stack.yml -e "cloud_name=mycloud"
+#
+# This is the recommended way to deploy the entire stack at once
+# =============================================================================
+
+- name: Complete Three-Tier Application Deployment
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Display deployment start message
+      debug:
+        msg: |
+          ========================================
+          Starting Complete Stack Deployment
+          ========================================
+          This will:
+          1. Provision infrastructure on OpenStack
+          2. Configure database server
+          3. Configure web servers
+          4. Configure load balancer
+          
+          Estimated time: 15-20 minutes
+          ========================================
+
+# =============================================================================
+# PHASE 1: Provision Infrastructure
+# =============================================================================
+
+- name: Provision OpenStack Infrastructure
+  import_playbook: 03-provision-three-tier-infrastructure.yml
+
+# =============================================================================
+# PHASE 2: Configure Database Tier
+# =============================================================================
+
+- name: Configure Database Server
+  import_playbook: 04-configure-database.yml
+
+# =============================================================================
+# PHASE 3: Configure Web Tier
+# =============================================================================
+
+- name: Configure Web Servers
+  import_playbook: 05-configure-webservers.yml
+
+# =============================================================================
+# PHASE 4: Configure Load Balancer
+# =============================================================================
+
+- name: Configure Load Balancer
+  import_playbook: 06-configure-loadbalancer.yml
+
+# =============================================================================
+# PHASE 5: Final Verification
+# =============================================================================
+
+- name: Final Verification and Summary
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Read infrastructure info
+      slurp:
+        src: ./infrastructure-info.txt
+      register: infra_info
+      ignore_errors: true
+
+    - name: Display deployment completion summary
+      debug:
+        msg: |
+          ========================================
+          DEPLOYMENT COMPLETE!
+          ========================================
+          
+          Your three-tier application is now live!
+          
+          📊 Infrastructure Details:
+          -------------------------
+          See: ./infrastructure-info.txt
+          
+          🌐 Access Your Application:
+          --------------------------
+          Application URL: Check infrastructure-info.txt for load balancer IP
+          HAProxy Stats: http://LB_IP:8404/stats
+            Username: admin
+            Password: HAProxyStatsPassword123!
+          
+          🔍 Verification Steps:
+          ---------------------
+          1. Open application URL in browser
+          2. You should see the three-tier web application
+          3. Refresh page - server name should change (load balancing)
+          4. Check HAProxy stats page for backend health
+          
+          📁 Files Created:
+          ----------------
+          - ./infrastructure-info.txt
+          - ./inventories/production/hosts
+          
+          🛠️ Management Commands:
+          ----------------------
+          # View all hosts
+          ansible all -i inventories/production/hosts --list-hosts
+          
+          # Check application status
+          ansible all -i inventories/production/hosts -m ping
+          
+          # View load balancer stats
+          ssh ubuntu@LB_IP "sudo haproxy-manage stats"
+          
+          # Check database connection
+          ssh ubuntu@DB_IP "sudo -u postgres psql -d webapp_db -c 'SELECT COUNT(*) FROM visits;'"
+          
+          🔧 Useful Ansible Commands:
+          ---------------------------
+          # Restart web servers
+          ansible webservers -i inventories/production/hosts -b -a "systemctl restart nginx"
+          
+          # Check HAProxy backends
+          ansible loadbalancers -i inventories/production/hosts -b -a "haproxy-manage backends"
+          
+          # Database backup
+          ansible databases -i inventories/production/hosts -b -a "haproxy-manage backup"
+          
+          📊 Application Architecture:
+          ---------------------------
+                  Internet
+                     |
+              [Load Balancer]
+                  /    \
+            [Web-1] [Web-2]
+                  \    /
+               [Database]
+          
+          🎉 Success! Your application is running!
+          ========================================
+
+- name: Test Application Accessibility
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Get load balancer IP from infrastructure info
+      shell: grep "Public IP:" infrastructure-info.txt | head -1 | awk '{print $3}'
+      register: lb_ip
+      ignore_errors: true
+
+    - name: Test application endpoint
+      uri:
+        url: "http://{{ lb_ip.stdout }}"
+        return_content: false
+        status_code: 200
+      register: app_test
+      ignore_errors: true
+      when: lb_ip.stdout is defined and lb_ip.stdout != ""
+
+    - name: Display access test result
+      debug:
+        msg: |
+          Application Test:
+          {% if app_test.status == 200 %}
+          ✅ SUCCESS! Application is accessible at http://{{ lb_ip.stdout }}
+          {% else %}
+          ⏳ Application may still be initializing. Try accessing in a few moments.
+          URL: http://{{ lb_ip.stdout }}
+          {% endif %}
+      when: lb_ip.stdout is defined and lb_ip.stdout != ""

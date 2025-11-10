@@ -1,0 +1,226 @@
+---
+- name: Check Status of Async Jobs
+  hosts: local
+  gather_facts: no
+
+  vars:
+    job_registry: /tmp/async_jobs.json
+
+  tasks:
+  - name: Check if job registry exists
+    stat:
+      path: "{{ job_registry }}"
+    register: registry_check
+
+  - name: Fail if no jobs to check
+    fail:
+      msg: |
+        No job registry found at {{ job_registry }}
+        Run fire-and-forget.yml first to launch async jobs.
+    when: not registry_check.stat.exists
+
+  - name: Load job registry
+    slurp:
+      src: "{{ job_registry }}"
+    register: jobs_file
+
+  - name: Parse job information
+    set_fact:
+      jobs: "{{ jobs_file.content | b64decode | from_json }}"
+
+  - name: Display jobs to check
+    debug:
+      msg: |
+        Checking status of {{ jobs | length }} jobs:
+        {% for job_name, job_info in jobs.items() %}
+        - {{ job_name }}: {{ job_info.description }}
+        {% endfor %}
+
+  - name: Check status of Task 1
+    async_status:
+      jid: "{{ jobs.task1.job_id }}"
+    register: task1_status
+    ignore_errors: yes
+
+  - name: Check status of Task 2
+    async_status:
+      jid: "{{ jobs.task2.job_id }}"
+    register: task2_status
+    ignore_errors: yes
+
+  - name: Check status of Task 3
+    async_status:
+      jid: "{{ jobs.task3.job_id }}"
+    register: task3_status
+    ignore_errors: yes
+
+  - name: Display Task 1 status
+    debug:
+      msg: |
+        Task 1 - {{ jobs.task1.description }}
+        =====================================
+        Job ID: {{ jobs.task1.job_id }}
+        Started: {{ jobs.task1.started }}
+        Timeout: {{ jobs.task1.timeout }}s
+
+        {% if task1_status.finished == 1 %}
+        ✅ STATUS: COMPLETED
+        Return Code: {{ task1_status.rc }}
+        Duration: {{ task1_status.delta }}
+
+        Output (last 10 lines):
+        {{ task1_status.stdout_lines[-10:] | join('\n') if task1_status.stdout_lines is defined else 'No output' }}
+        {% elif task1_status.finished == 0 %}
+        ⏳ STATUS: STILL RUNNING
+        Elapsed time: Check log at /tmp/async_work/task1.log
+        {% else %}
+        ❌ STATUS: FAILED OR NOT FOUND
+        {% endif %}
+
+  - name: Display Task 2 status
+    debug:
+      msg: |
+        Task 2 - {{ jobs.task2.description }}
+        =====================================
+        Job ID: {{ jobs.task2.job_id }}
+        Started: {{ jobs.task2.started }}
+        Timeout: {{ jobs.task2.timeout }}s
+
+        {% if task2_status.finished == 1 %}
+        ✅ STATUS: COMPLETED
+        Return Code: {{ task2_status.rc }}
+        Duration: {{ task2_status.delta }}
+
+        Backup files created:
+        {{ task2_status.stdout_lines | select('search', '.tar.gz') | list | join('\n') }}
+        {% elif task2_status.finished == 0 %}
+        ⏳ STATUS: STILL RUNNING
+        Check log at /tmp/async_work/backup.log
+        {% else %}
+        ❌ STATUS: FAILED OR NOT FOUND
+        {% endif %}
+
+  - name: Display Task 3 status
+    debug:
+      msg: |
+        Task 3 - {{ jobs.task3.description }}
+        =====================================
+        Job ID: {{ jobs.task3.job_id }}
+        Started: {{ jobs.task3.started }}
+        Timeout: {{ jobs.task3.timeout }}s
+
+        {% if task3_status.finished == 1 %}
+        ✅ STATUS: COMPLETED
+        Return Code: {{ task3_status.rc }}
+        Duration: {{ task3_status.delta }}
+
+        Files created:
+        {{ task3_status.stdout_lines | select('search', 'testfile') | list | join('\n') }}
+        {% elif task3_status.finished == 0 %}
+        ⏳ STATUS: STILL RUNNING
+        Check log at /tmp/async_work/processing.log
+        {% else %}
+        ❌ STATUS: FAILED OR NOT FOUND
+        {% endif %}
+
+  - name: Check task log files
+    shell: |
+      echo "=== Task Logs ==="
+      for log in /tmp/async_work/*.log; do
+        if [ -f "$log" ]; then
+          echo ""
+          echo "Log: $log"
+          echo "Last modified: $(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$log" 2>/dev/null || stat -c '%y' "$log" 2>/dev/null)"
+          echo "Size: $(du -h "$log" | cut -f1)"
+          echo "Last 3 lines:"
+          tail -3 "$log"
+          echo "---"
+        fi
+      done
+    register: log_check
+    changed_when: false
+
+  - name: Display log information
+    debug:
+      msg: "{{ log_check.stdout }}"
+
+  - name: Overall status summary
+    debug:
+      msg: |
+        ================================================
+        Async Jobs Status Summary
+        ================================================
+        Time: {{ ansible_date_time.time }}
+
+        Task 1 (Long-running): {{ '✅ Complete' if task1_status.finished == 1 else '⏳ Running' if task1_status.finished == 0 else '❌ Failed' }}
+        Task 2 (Backup):       {{ '✅ Complete' if task2_status.finished == 1 else '⏳ Running' if task2_status.finished == 0 else '❌ Failed' }}
+        Task 3 (Processing):   {{ '✅ Complete' if task3_status.finished == 1 else '⏳ Running' if task3_status.finished == 0 else '❌ Failed' }}
+
+        {% set completed = [task1_status, task2_status, task3_status] | selectattr('finished', 'equalto', 1) | list | length %}
+        {% set running = [task1_status, task2_status, task3_status] | selectattr('finished', 'equalto', 0) | list | length %}
+
+        Completed: {{ completed }}/3
+        Running: {{ running }}/3
+
+        {% if running > 0 %}
+        💡 Some tasks still running. Run this playbook again to check status.
+        {% else %}
+        🎉 All tasks completed!
+        {% endif %}
+
+  - name: Save status report
+    copy:
+      content: |
+        Async Jobs Status Report
+        ========================
+        Generated: {{ ansible_date_time.iso8601 }}
+
+        Task 1: {{ jobs.task1.description }}
+        Job ID: {{ jobs.task1.job_id }}
+        Status: {{ 'Complete' if task1_status.finished == 1 else 'Running' if task1_status.finished == 0 else 'Failed' }}
+        {% if task1_status.finished == 1 %}
+        Return Code: {{ task1_status.rc }}
+        Duration: {{ task1_status.delta }}
+        {% endif %}
+
+        Task 2: {{ jobs.task2.description }}
+        Job ID: {{ jobs.task2.job_id }}
+        Status: {{ 'Complete' if task2_status.finished == 1 else 'Running' if task2_status.finished == 0 else 'Failed' }}
+        {% if task2_status.finished == 1 %}
+        Return Code: {{ task2_status.rc }}
+        Duration: {{ task2_status.delta }}
+        {% endif %}
+
+        Task 3: {{ jobs.task3.description }}
+        Job ID: {{ jobs.task3.job_id }}
+        Status: {{ 'Complete' if task3_status.finished == 1 else 'Running' if task3_status.finished == 0 else 'Failed' }}
+        {% if task3_status.finished == 1 %}
+        Return Code: {{ task3_status.rc }}
+        Duration: {{ task3_status.delta }}
+        {% endif %}
+      dest: /tmp/async_status_report_{{ ansible_date_time.epoch }}.txt
+      mode: '0644'
+
+  - name: Report saved
+    debug:
+      msg: "Status report saved to /tmp/async_status_report_{{ ansible_date_time.epoch }}.txt"
+
+# Usage:
+#
+# First, launch async jobs:
+#   ansible-playbook -i inventory.ini fire-and-forget.yml
+#
+# Then check their status (immediately):
+#   ansible-playbook -i inventory.ini status-checking.yml
+#
+# Check again after 30 seconds:
+#   sleep 30
+#   ansible-playbook -i inventory.ini status-checking.yml
+#
+# Check again after jobs should be complete:
+#   sleep 60
+#   ansible-playbook -i inventory.ini status-checking.yml
+#
+# View all status reports:
+#   ls -lt /tmp/async_status_report_*.txt
+#   cat /tmp/async_status_report_*.txt | tail -50

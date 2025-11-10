@@ -1,0 +1,234 @@
+---
+- name: Database Backup with Error Handling
+  hosts: dbservers
+  become: yes
+  gather_facts: yes
+
+  vars:
+    backup_dir: /var/backups/databases
+    database_name: "{{ db_name | default('testdb') }}"
+    retention_days: 7
+    timestamp: "{{ ansible_date_time.epoch }}"
+
+  tasks:
+  - name: Database backup with comprehensive error handling
+    block:
+    # Pre-flight checks
+    - name: Check if database exists
+      postgresql_query:
+        db: postgres
+        query: "SELECT 1 FROM pg_database WHERE datname = '{{ database_name }}'"
+      become_user: postgres
+      register: db_exists
+      failed_when: false
+
+    - name: Fail if database doesn't exist
+      fail:
+        msg: "Database '{{ database_name }}' does not exist!"
+      when: db_exists.query_result | length == 0
+
+    # Prepare backup environment
+    - name: Ensure backup directory exists
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0750'
+        owner: postgres
+        group: postgres
+
+    - name: Check available disk space
+      shell: df -BG {{ backup_dir }} | tail -1 | awk '{print $4}' | sed 's/G//'
+      register: free_space
+      changed_when: false
+
+    - name: Ensure sufficient disk space (at least 1GB)
+      assert:
+        that:
+        - free_space.stdout | int > 1
+        fail_msg: "Insufficient disk space: {{ free_space.stdout }}GB available"
+        success_msg: "Sufficient disk space: {{ free_space.stdout }}GB available"
+
+    # Perform backup
+    - name: Create database dump
+      postgresql_db:
+        name: "{{ database_name }}"
+        state: dump
+        target: "{{ backup_dir }}/{{ database_name }}_{{ timestamp }}.sql"
+      become_user: postgres
+      register: dump_result
+
+    - name: Verify dump file was created
+      stat:
+        path: "{{ backup_dir }}/{{ database_name }}_{{ timestamp }}.sql"
+      register: dump_file
+
+    - name: Get dump file size
+      debug:
+        msg: "Backup size: {{ (dump_file.stat.size / 1024 / 1024) | round(2) }} MB"
+
+    # Compress backup
+    - name: Compress backup file
+      archive:
+        path: "{{ backup_dir }}/{{ database_name }}_{{ timestamp }}.sql"
+        dest: "{{ backup_dir }}/{{ database_name }}_{{ timestamp }}.sql.gz"
+        format: gz
+        remove: yes
+      register: compress_result
+
+    - name: Verify compressed file
+      stat:
+        path: "{{ backup_dir }}/{{ database_name }}_{{ timestamp }}.sql.gz"
+      register: compressed_file
+
+    - name: Calculate compression ratio
+      debug:
+        msg: "Compression: {{ ((1 - (compressed_file.stat.size / dump_file.stat.size)) * 100) | round(1) }}% saved"
+
+    # Cleanup old backups
+    - name: Find old backups
+      find:
+        paths: "{{ backup_dir }}"
+        patterns: "{{ database_name }}_*.sql.gz"
+        age: "{{ retention_days }}d"
+      register: old_backups
+
+    - name: Remove old backups
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"
+      when: old_backups.files | length > 0
+
+    - name: List remaining backups
+      find:
+        paths: "{{ backup_dir }}"
+        patterns: "{{ database_name }}_*.sql.gz"
+      register: current_backups
+
+    - name: Backup success message
+      debug:
+        msg: |
+          ✅ Backup completed successfully!
+          File: {{ compressed_file.stat.path }}
+          Size: {{ (compressed_file.stat.size / 1024 / 1024) | round(2) }} MB
+          Total backups: {{ current_backups.files | length }}
+          Old backups removed: {{ old_backups.files | length }}
+
+    rescue:
+    # Error handling
+    - name: Backup failed - capture error details
+      set_fact:
+        error_info: |
+          Backup Failure Report
+          ====================
+          Database: {{ database_name }}
+          Host: {{ inventory_hostname }}
+          Time: {{ ansible_date_time.iso8601 }}
+          Failed Task: {{ ansible_failed_task.name }}
+          Error: {{ ansible_failed_result.msg | default('Unknown error') }}
+
+    - name: Display error information
+      debug:
+        msg: "{{ error_info }}"
+
+    - name: Save error log
+      copy:
+        content: "{{ error_info }}"
+        dest: "{{ backup_dir }}/backup_failure_{{ timestamp }}.log"
+        mode: '0640'
+      when: backup_dir is directory
+
+    - name: Send alert notification
+      debug:
+        msg: |
+          ⚠️  ALERT: Database backup failed!
+          Check log: {{ backup_dir }}/backup_failure_{{ timestamp }}.log
+          Immediate action required!
+
+    # Cleanup partial/failed files
+    - name: Find partial backup files from this attempt
+      find:
+        paths: "{{ backup_dir }}"
+        patterns: "*{{ timestamp }}*"
+      register: partial_files
+
+    - name: Remove partial backup files
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ partial_files.files }}"
+      when: partial_files.files | length > 0
+
+    - name: Rescue cleanup message
+      debug:
+        msg: "🧹 Cleaned up {{ partial_files.files | length }} partial files"
+
+    # Attempt emergency backup to alternative location
+    - name: Attempt emergency backup to /tmp
+      postgresql_db:
+        name: "{{ database_name }}"
+        state: dump
+        target: "/tmp/emergency_{{ database_name }}_{{ timestamp }}.sql"
+      become_user: postgres
+      register: emergency_backup
+      ignore_errors: yes
+
+    - name: Emergency backup status
+      debug:
+        msg: |
+          {% if emergency_backup is succeeded %}
+          ✅ Emergency backup created: /tmp/emergency_{{ database_name }}_{{ timestamp }}.sql
+          {% else %}
+          ❌ Emergency backup also failed
+          {% endif %}
+
+    always:
+    # Always cleanup and logging
+    - name: Record backup attempt in history
+      lineinfile:
+        path: "{{ backup_dir }}/backup_history.log"
+        line: "{{ ansible_date_time.iso8601 }} | {{ database_name }} | {{ 'SUCCESS' if ansible_failed_task is not defined else 'FAILED' }} | {{ inventory_hostname }}"
+        create: yes
+        mode: '0640'
+
+    - name: Clean up temporary files
+      find:
+        paths: "{{ backup_dir }}"
+        patterns: "*.tmp"
+      register: temp_files
+
+    - name: Remove temp files
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ temp_files.files }}"
+      when: temp_files.files | length > 0
+
+    - name: Display backup history
+      shell: tail -n 10 {{ backup_dir }}/backup_history.log
+      register: history
+      changed_when: false
+
+    - name: Show recent backup history
+      debug:
+        msg: "{{ history.stdout_lines }}"
+
+    - name: Final status message
+      debug:
+        msg: |
+          Backup operation completed
+          Check {{ backup_dir }}/backup_history.log for details
+
+# Usage examples:
+#
+# Backup default database:
+#   ansible-playbook -i inventory.ini database-backup.yml
+#
+# Backup specific database:
+#   ansible-playbook -i inventory.ini database-backup.yml -e "db_name=production"
+#
+# Set custom retention:
+#   ansible-playbook -i inventory.ini database-backup.yml -e "retention_days=14"
+#
+# View backup history:
+#   ansible dbservers -i inventory.ini -m shell -a "cat /var/backups/databases/backup_history.log" --become

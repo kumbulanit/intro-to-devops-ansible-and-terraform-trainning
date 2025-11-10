@@ -1,0 +1,516 @@
+---
+#=============================================================================
+# Master Playbook: Deploy Everything on Single OpenStack Instance
+#=============================================================================
+# Description: Complete deployment of AWX and three-tier application stack
+#              on a single existing OpenStack instance
+#
+# Prerequisites:
+#   - Existing OpenStack instance (Ubuntu 20.04/22.04)
+#   - Update inventory.ini with your instance IP and SSH key
+#   - At least 8GB RAM, 4 CPUs, 40GB disk space
+#   - SSH access with sudo privileges
+#
+# Usage:
+#   # First, update inventory.ini with your OpenStack instance details
+#   vim inventory.ini
+#   
+#   # Then run the complete deployment
+#   ansible-playbook 10-deploy-everything-single-instance.yml -i inventory.ini
+#
+# What this playbook does:
+#   1. Installs AWX (Ansible Tower) on the instance
+#   2. Installs PostgreSQL database
+#   3. Installs Nginx web server with PHP
+#   4. Deploys sample web application
+#   5. Installs HAProxy load balancer
+#   6. Configures all services to work together
+#
+# Deployment Timeline:
+#   - System preparation: 2-3 minutes
+#   - AWX installation: 20-30 minutes
+#   - Application stack: 10-15 minutes
+#   - Total time: ~40-50 minutes
+#
+# Final Architecture:
+#   Single OpenStack Instance running:
+#     - AWX: Port 8080 (Docker containers)
+#     - PostgreSQL: Port 5432 (for web app)
+#     - Nginx/PHP: Port 8081 (application server)
+#     - HAProxy: Port 80 (load balancer frontend)
+#     - HAProxy Stats: Port 8404
+#
+#=============================================================================
+
+- name: Pre-Flight Checks
+  hosts: openstack_instance
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Display deployment information
+      debug:
+        msg:
+          - "╔════════════════════════════════════════════════════════════════╗"
+          - "║   Complete Deployment on Single OpenStack Instance            ║"
+          - "╚════════════════════════════════════════════════════════════════╝"
+          - ""
+          - "📍 Target Server: {{ inventory_hostname }}"
+          - "🌐 IP Address: {{ ansible_host }}"
+          - "💻 OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "🔧 CPUs: {{ ansible_processor_vcpus }}"
+          - "💾 RAM: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB"
+          - ""
+          - "Components to be installed:"
+          - "  ✅ Docker & Docker Compose"
+          - "  ✅ AWX (Ansible Tower) - Port 8080"
+          - "  ✅ PostgreSQL Database - Port 5432"
+          - "  ✅ Nginx Web Server - Port 8081"
+          - "  ✅ PHP Application"
+          - "  ✅ HAProxy Load Balancer - Port 80"
+          - ""
+          - "⏱️  Estimated time: 40-50 minutes"
+          - ""
+
+    - name: Check system requirements
+      assert:
+        that:
+          - ansible_memtotal_mb >= 7500
+          - ansible_processor_vcpus >= 4
+        fail_msg: |
+          ❌ System does not meet minimum requirements!
+          Required: 8GB RAM, 4 CPUs
+          Found: {{ (ansible_memtotal_mb / 1024) | round(1) }}GB RAM, {{ ansible_processor_vcpus }} CPUs
+        success_msg: "✅ System requirements check passed"
+
+    - name: Check available disk space
+      shell: df -BG {{ item }} | awk 'NR==2 {print $4}' | sed 's/G//'
+      loop:
+        - /opt
+        - /var
+      register: disk_space
+      changed_when: false
+
+    - name: Verify sufficient disk space
+      assert:
+        that: item.stdout | int >= 15
+        fail_msg: "❌ Insufficient disk space on {{ item.item }}. Need at least 15GB available"
+        success_msg: "✅ Disk space check passed for {{ item.item }} ({{ item.stdout }}GB available)"
+      loop: "{{ disk_space.results }}"
+
+    - name: Check if running as Ubuntu
+      assert:
+        that: ansible_distribution == "Ubuntu"
+        fail_msg: "❌ This playbook requires Ubuntu. Found: {{ ansible_distribution }}"
+        success_msg: "✅ Operating system check passed"
+
+    - name: Test internet connectivity
+      uri:
+        url: https://github.com
+        timeout: 10
+      register: internet_test
+      failed_when: false
+
+    - name: Verify internet access
+      assert:
+        that: internet_test.status == 200
+        fail_msg: "❌ No internet connectivity. Required for downloading packages"
+        success_msg: "✅ Internet connectivity verified"
+
+    - name: Check if port 8080 is available (for AWX)
+      wait_for:
+        host: 127.0.0.1
+        port: 8080
+        state: stopped
+        timeout: 5
+      failed_when: false
+      register: port_8080
+
+    - name: Warn if port 8080 is in use
+      debug:
+        msg: "⚠️  WARNING: Port 8080 appears to be in use. AWX installation may fail."
+      when: port_8080.failed
+
+#=============================================================================
+# STAGE 1: Install AWX (Ansible Tower)
+#=============================================================================
+- name: "STAGE 1/2: Install AWX"
+  hosts: awx_servers
+  become: yes
+  
+  tasks:
+    - name: Stage 1 - Starting AWX Installation
+      debug:
+        msg:
+          - ""
+          - "╔════════════════════════════════════════════════════════════════╗"
+          - "║  STAGE 1/2: Installing AWX (Ansible Tower)                    ║"
+          - "╚════════════════════════════════════════════════════════════════╝"
+          - ""
+          - "⏱️  This will take approximately 20-30 minutes..."
+          - ""
+
+- import_playbook: 08-install-awx-on-existing-instance.yml
+
+#=============================================================================
+# STAGE 2: Install Complete Application Stack
+#=============================================================================
+- name: "STAGE 2/2: Install Application Stack"
+  hosts: openstack_instance
+  become: yes
+  
+  tasks:
+    - name: Stage 2 - Starting Application Stack Installation
+      debug:
+        msg:
+          - ""
+          - "╔════════════════════════════════════════════════════════════════╗"
+          - "║  STAGE 2/2: Installing Application Stack                      ║"
+          - "╚════════════════════════════════════════════════════════════════╝"
+          - ""
+          - "Components:"
+          - "  🗄️  PostgreSQL Database"
+          - "  🌐 Nginx Web Server"
+          - "  🔧 PHP Application"
+          - "  ⚖️  HAProxy Load Balancer"
+          - ""
+          - "⏱️  This will take approximately 10-15 minutes..."
+          - ""
+
+- import_playbook: 09-install-all-apps-on-single-instance.yml
+
+#=============================================================================
+# Final Verification and Summary
+#=============================================================================
+- name: Final Verification and Summary
+  hosts: openstack_instance
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Wait a moment for all services to stabilize
+      pause:
+        seconds: 10
+
+    - name: Verify Docker is running
+      command: docker ps
+      register: docker_ps
+      changed_when: false
+      failed_when: false
+
+    - name: Verify AWX containers are running
+      shell: docker ps --filter "name=awx" --format "{{.Names}}: {{.Status}}"
+      register: awx_containers
+      changed_when: false
+      failed_when: false
+
+    - name: Check AWX API
+      uri:
+        url: "http://127.0.0.1:8080/api/v2/ping/"
+        method: GET
+        status_code: 200
+      register: awx_api
+      failed_when: false
+      retries: 3
+      delay: 10
+
+    - name: Check all service status
+      command: "systemctl is-active {{ item }}"
+      loop:
+        - docker
+        - postgresql
+        - nginx
+        - haproxy
+      register: all_services
+      changed_when: false
+      failed_when: false
+
+    - name: Test web application
+      uri:
+        url: "http://127.0.0.1:8081/"
+        method: GET
+        status_code: 200
+      register: web_test
+      failed_when: false
+
+    - name: Test load balancer
+      uri:
+        url: "http://127.0.0.1:80/"
+        method: GET
+        status_code: 200
+      register: lb_test
+      failed_when: false
+
+    - name: Test HAProxy stats
+      uri:
+        url: "http://127.0.0.1:8404/stats"
+        method: GET
+        status_code: 200
+        url_username: "{{ haproxy_stats_user }}"
+        url_password: "{{ haproxy_stats_password }}"
+      register: stats_test
+      failed_when: false
+
+    - name: Get firewall status
+      command: ufw status
+      register: firewall_status
+      changed_when: false
+
+    - name: Create comprehensive summary
+      set_fact:
+        deployment_summary:
+          server_info:
+            hostname: "{{ ansible_hostname }}"
+            ip_address: "{{ ansible_host }}"
+            os: "{{ ansible_distribution }} {{ ansible_distribution_version }}"
+            cpu: "{{ ansible_processor_vcpus }} cores"
+            ram: "{{ (ansible_memtotal_mb / 1024) | round(1) }}GB"
+          services:
+            docker: "{{ all_services.results[0].stdout }}"
+            postgresql: "{{ all_services.results[1].stdout }}"
+            nginx: "{{ all_services.results[2].stdout }}"
+            haproxy: "{{ all_services.results[3].stdout }}"
+          health_checks:
+            awx_api: "{{ 'PASS' if awx_api.status == 200 else 'FAIL' }}"
+            web_app: "{{ 'PASS' if web_test.status == 200 else 'FAIL' }}"
+            load_balancer: "{{ 'PASS' if lb_test.status == 200 else 'FAIL' }}"
+            haproxy_stats: "{{ 'PASS' if stats_test.status == 200 else 'FAIL' }}"
+
+    - name: Display final deployment summary
+      debug:
+        msg:
+          - ""
+          - "╔════════════════════════════════════════════════════════════════╗"
+          - "║          🎉 DEPLOYMENT COMPLETED SUCCESSFULLY! 🎉             ║"
+          - "╚════════════════════════════════════════════════════════════════╝"
+          - ""
+          - "📊 SERVER INFORMATION:"
+          - "   Hostname:    {{ deployment_summary.server_info.hostname }}"
+          - "   IP Address:  {{ deployment_summary.server_info.ip_address }}"
+          - "   OS:          {{ deployment_summary.server_info.os }}"
+          - "   Resources:   {{ deployment_summary.server_info.cpu }} / {{ deployment_summary.server_info.ram }}"
+          - ""
+          - "✅ SERVICE STATUS:"
+          - "   Docker:      {{ deployment_summary.services.docker }}"
+          - "   PostgreSQL:  {{ deployment_summary.services.postgresql }}"
+          - "   Nginx:       {{ deployment_summary.services.nginx }}"
+          - "   HAProxy:     {{ deployment_summary.services.haproxy }}"
+          - ""
+          - "🏥 HEALTH CHECKS:"
+          - "   AWX API:          {{ deployment_summary.health_checks.awx_api }}"
+          - "   Web Application:  {{ deployment_summary.health_checks.web_app }}"
+          - "   Load Balancer:    {{ deployment_summary.health_checks.load_balancer }}"
+          - "   HAProxy Stats:    {{ deployment_summary.health_checks.haproxy_stats }}"
+          - ""
+          - "🌐 ACCESS URLS:"
+          - "   ┌─────────────────────────────────────────────────────────────┐"
+          - "   │ AWX Dashboard:       http://{{ ansible_host }}:8080         │"
+          - "   │ Web Application:     http://{{ ansible_host }}              │"
+          - "   │ HAProxy Statistics:  http://{{ ansible_host }}:8404/stats   │"
+          - "   │ Direct Web Access:   http://{{ ansible_host }}:8081         │"
+          - "   └─────────────────────────────────────────────────────────────┘"
+          - ""
+          - "🔐 CREDENTIALS:"
+          - "   AWX:"
+          - "     Username: {{ awx_admin_user }}"
+          - "     Password: {{ awx_admin_password }}"
+          - ""
+          - "   HAProxy Stats:"
+          - "     Username: {{ haproxy_stats_user }}"
+          - "     Password: {{ haproxy_stats_password }}"
+          - ""
+          - "   Database:"
+          - "     Database: {{ db_name }}"
+          - "     Username: {{ db_user }}"
+          - "     Password: {{ db_password }}"
+          - ""
+          - "🔧 QUICK COMMANDS:"
+          - "   # Check all services"
+          - "   sudo systemctl status docker postgresql nginx haproxy"
+          - ""
+          - "   # Manage AWX"
+          - "   sudo awx-manage.sh status|start|stop|restart|logs"
+          - ""
+          - "   # View logs"
+          - "   docker logs -f awx-web"
+          - "   sudo journalctl -u nginx -f"
+          - "   sudo journalctl -u haproxy -f"
+          - ""
+          - "📝 ARCHITECTURE:"
+          - "   Client Request → HAProxy (Port 80)"
+          - "                  ↓"
+          - "              Nginx/PHP (Port 8081)"
+          - "                  ↓"
+          - "              PostgreSQL (Port 5432)"
+          - ""
+          - "   Separate: AWX on Docker (Port 8080)"
+          - ""
+          - "📄 DOCUMENTATION:"
+          - "   • Access info saved to: ./awx-access-info.txt"
+          - "   • Stack info saved to: ./complete-stack-access-info.txt"
+          - "   • Full README: ./README.md"
+          - ""
+          - "🎯 NEXT STEPS:"
+          - "   1. Open AWX: http://{{ ansible_host }}:8080"
+          - "   2. Login and configure your first project"
+          - "   3. Test the web app: http://{{ ansible_host }}"
+          - "   4. Check HAProxy stats: http://{{ ansible_host }}:8404/stats"
+          - ""
+          - "╔════════════════════════════════════════════════════════════════╗"
+          - "║                   Happy Automating! 🚀                         ║"
+          - "╚════════════════════════════════════════════════════════════════╝"
+          - ""
+
+    - name: Save complete deployment summary
+      copy:
+        dest: "./deployment-summary-{{ ansible_date_time.date }}.txt"
+        content: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║     Complete Deployment Summary - Single Instance             ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          Deployment Date: {{ ansible_date_time.iso8601 }}
+          
+          SERVER INFORMATION:
+          ==================
+          Hostname:        {{ deployment_summary.server_info.hostname }}
+          IP Address:      {{ deployment_summary.server_info.ip_address }}
+          Operating System: {{ deployment_summary.server_info.os }}
+          CPU Cores:       {{ deployment_summary.server_info.cpu }}
+          RAM:             {{ deployment_summary.server_info.ram }}
+          
+          INSTALLED COMPONENTS:
+          ====================
+          ✅ Docker & Docker Compose
+          ✅ AWX (Ansible Tower) v{{ awx_version }}
+          ✅ PostgreSQL Database
+          ✅ Nginx Web Server
+          ✅ PHP-FPM
+          ✅ HAProxy Load Balancer
+          
+          SERVICE STATUS:
+          ==============
+          Docker:      {{ deployment_summary.services.docker }}
+          PostgreSQL:  {{ deployment_summary.services.postgresql }}
+          Nginx:       {{ deployment_summary.services.nginx }}
+          HAProxy:     {{ deployment_summary.services.haproxy }}
+          
+          HEALTH CHECKS:
+          =============
+          AWX API:          {{ deployment_summary.health_checks.awx_api }}
+          Web Application:  {{ deployment_summary.health_checks.web_app }}
+          Load Balancer:    {{ deployment_summary.health_checks.load_balancer }}
+          HAProxy Stats:    {{ deployment_summary.health_checks.haproxy_stats }}
+          
+          ACCESS INFORMATION:
+          ==================
+          AWX Dashboard:       http://{{ ansible_host }}:8080
+          Web Application:     http://{{ ansible_host }}
+          HAProxy Statistics:  http://{{ ansible_host }}:8404/stats
+          Direct Web Access:   http://{{ ansible_host }}:8081
+          
+          CREDENTIALS:
+          ===========
+          AWX:
+            Username: {{ awx_admin_user }}
+            Password: {{ awx_admin_password }}
+          
+          HAProxy Stats:
+            Username: {{ haproxy_stats_user }}
+            Password: {{ haproxy_stats_password }}
+          
+          Database:
+            Host:     127.0.0.1
+            Port:     5432
+            Database: {{ db_name }}
+            Username: {{ db_user }}
+            Password: {{ db_password }}
+          
+          MANAGEMENT COMMANDS:
+          ===================
+          Check Service Status:
+            sudo systemctl status docker
+            sudo systemctl status postgresql
+            sudo systemctl status nginx
+            sudo systemctl status haproxy
+          
+          Manage AWX:
+            sudo awx-manage.sh status
+            sudo awx-manage.sh start
+            sudo awx-manage.sh stop
+            sudo awx-manage.sh restart
+            sudo awx-manage.sh logs
+            sudo awx-manage.sh backup
+          
+          View Logs:
+            docker logs -f awx-web
+            docker logs -f awx-postgres
+            sudo tail -f /var/log/nginx/error.log
+            sudo journalctl -u haproxy -f
+            sudo tail -f /var/log/postgresql/postgresql-*-main.log
+          
+          ARCHITECTURE:
+          ============
+          Single OpenStack Instance:
+            • HAProxy (Load Balancer) - Port 80
+                ↓
+            • Nginx (Web Server) - Port 8081
+                ↓
+            • PHP Application
+                ↓
+            • PostgreSQL (Database) - Port 5432
+          
+          Separate Docker Stack:
+            • AWX (Ansible Tower) - Port 8080
+            • AWX PostgreSQL (dedicated)
+            • AWX Redis
+          
+          PORTS IN USE:
+          ============
+          22    - SSH
+          80    - HAProxy (Load Balancer Frontend)
+          5432  - PostgreSQL (Web App Database)
+          8080  - AWX Web Interface
+          8081  - Nginx (Web Server Backend)
+          8404  - HAProxy Statistics
+          
+          TROUBLESHOOTING:
+          ===============
+          If AWX is not accessible:
+            1. Check container status: docker ps
+            2. View AWX logs: docker logs awx-web
+            3. Restart AWX: sudo awx-manage.sh restart
+          
+          If web app shows database errors:
+            1. Check PostgreSQL: sudo systemctl status postgresql
+            2. Test connection: psql -U {{ db_user }} -d {{ db_name }} -h 127.0.0.1
+            3. Check Nginx logs: sudo tail -f /var/log/nginx/error.log
+          
+          If load balancer not working:
+            1. Check HAProxy: sudo systemctl status haproxy
+            2. View stats: http://{{ ansible_host }}:8404/stats
+            3. Check logs: sudo journalctl -u haproxy -f
+          
+          BACKUP PROCEDURES:
+          =================
+          AWX Backup:
+            sudo awx-manage.sh backup
+          
+          Database Backup:
+            sudo -u postgres pg_dump {{ db_name }} > webapp_backup.sql
+          
+          ╔════════════════════════════════════════════════════════════════╗
+          ║              Deployment Completed Successfully!               ║
+          ╚════════════════════════════════════════════════════════════════╝
+      delegate_to: localhost
+      become: no
+
+    - name: Display saved files
+      debug:
+        msg:
+          - ""
+          - "📄 Generated files:"
+          - "   • ./deployment-summary-{{ ansible_date_time.date }}.txt"
+          - "   • ./awx-access-info.txt"
+          - "   • ./complete-stack-access-info.txt"
+          - ""

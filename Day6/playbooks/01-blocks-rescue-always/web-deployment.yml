@@ -1,0 +1,303 @@
+---
+- name: Web Server Deployment with Automatic Rollback
+  hosts: webservers
+  become: yes
+  gather_facts: yes
+
+  vars:
+    nginx_version: "{{ version | default('latest') }}"
+    config_dir: /etc/nginx
+    backup_dir: /var/backups/nginx
+    web_root: /var/www/html
+    timestamp: "{{ ansible_date_time.epoch }}"
+
+  tasks:
+  - name: Deploy nginx with automatic rollback
+    block:
+    # Pre-deployment checks
+    - name: Check if nginx is installed
+      command: nginx -v
+      register: nginx_check
+      failed_when: false
+      changed_when: false
+
+    - name: Store current nginx status
+      systemd:
+        name: nginx
+        state: started
+      register: nginx_running
+      failed_when: false
+
+    # Backup current configuration
+    - name: Ensure backup directory exists
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Backup current nginx configuration
+      archive:
+        path:
+        - "{{ config_dir }}/nginx.conf"
+        - "{{ config_dir }}/sites-available"
+        - "{{ config_dir }}/sites-enabled"
+        dest: "{{ backup_dir }}/nginx_config_{{ timestamp }}.tar.gz"
+        format: gz
+      when: nginx_check.rc == 0
+      register: config_backup
+
+    - name: Backup current web content
+      archive:
+        path: "{{ web_root }}"
+        dest: "{{ backup_dir }}/web_content_{{ timestamp }}.tar.gz"
+        format: gz
+      when: web_root is directory
+      register: content_backup
+
+    - name: Display backup information
+      debug:
+        msg: |
+          Backups created:
+          - Config: {{ config_backup.dest | default('N/A') }}
+          - Content: {{ content_backup.dest | default('N/A') }}
+
+    # Install/Update nginx
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Install/Update nginx
+      apt:
+        name: nginx{{ '=' + nginx_version if nginx_version != 'latest' else '' }}
+        state: "{{ 'latest' if nginx_version == 'latest' else 'present' }}"
+      when: ansible_os_family == "Debian"
+      register: nginx_install
+
+    # Deploy new configuration
+    - name: Deploy new nginx configuration
+      template:
+        src: templates/nginx.conf.j2
+        dest: "{{ config_dir }}/nginx.conf"
+        backup: yes
+        validate: 'nginx -t -c %s'
+      register: nginx_config
+      when: false # Set to true when you have a template
+
+    - name: Deploy new website content
+      copy:
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Deployment {{ timestamp }}</title>
+          </head>
+          <body>
+              <h1>Successfully Deployed!</h1>
+              <p>Deployment Time: {{ ansible_date_time.iso8601 }}</p>
+              <p>Server: {{ inventory_hostname }}</p>
+              <p>Nginx Version: {{ nginx_install.stdout | default('Unknown') }}</p>
+          </body>
+          </html>
+        dest: "{{ web_root }}/index.html"
+        mode: '0644'
+
+    # Test configuration
+    - name: Test nginx configuration
+      command: nginx -t
+      register: config_test
+      changed_when: false
+
+    - name: Display configuration test results
+      debug:
+        msg: "{{ config_test.stderr_lines }}"
+
+    # Reload nginx
+    - name: Reload nginx
+      systemd:
+        name: nginx
+        state: reloaded
+      register: nginx_reload
+
+    # Verify deployment
+    - name: Wait for nginx to be ready
+      wait_for:
+        port: 80
+        delay: 2
+        timeout: 30
+
+    - name: Check nginx is responding
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}/"
+        return_content: yes
+        status_code: 200
+      register: health_check
+      until: health_check.status == 200
+      retries: 3
+      delay: 5
+
+    - name: Verify response content
+      assert:
+        that:
+        - "'Successfully Deployed' in health_check.content"
+        fail_msg: "Website content verification failed"
+        success_msg: "Website content verified successfully"
+
+    - name: Deployment success message
+      debug:
+        msg: |
+          ✅ Nginx deployment completed successfully!
+          - Version: {{ nginx_install.stdout | default('N/A') }}
+          - Config tested: OK
+          - Service reloaded: OK
+          - Health check: OK
+          - Access: http://{{ ansible_default_ipv4.address }}/
+
+    rescue:
+    # Rollback procedures
+    - name: Deployment failed - initiating rollback
+      debug:
+        msg: |
+          ❌ Deployment failed at: {{ ansible_failed_task.name }}
+          Error: {{ ansible_failed_result.msg | default('Unknown error') }}
+          Starting automatic rollback...
+
+    - name: Stop nginx (if running)
+      systemd:
+        name: nginx
+        state: stopped
+      ignore_errors: yes
+
+    - name: Restore nginx configuration
+      unarchive:
+        src: "{{ config_backup.dest }}"
+        dest: /
+        remote_src: yes
+      when: config_backup is defined and config_backup.dest is defined
+      ignore_errors: yes
+
+    - name: Restore web content
+      unarchive:
+        src: "{{ content_backup.dest }}"
+        dest: /
+        remote_src: yes
+      when: content_backup is defined and content_backup.dest is defined
+      ignore_errors: yes
+
+    - name: Test restored configuration
+      command: nginx -t
+      register: rollback_config_test
+      ignore_errors: yes
+
+    - name: Start nginx with restored config
+      systemd:
+        name: nginx
+        state: started
+      register: nginx_start
+      ignore_errors: yes
+
+    - name: Verify rollback success
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}/"
+        status_code: 200
+      register: rollback_check
+      ignore_errors: yes
+      until: rollback_check.status == 200
+      retries: 3
+      delay: 5
+
+    - name: Rollback status report
+      debug:
+        msg: |
+          Rollback Status Report
+          =====================
+          Config Test: {{ 'OK' if rollback_config_test.rc == 0 else 'FAILED' }}
+          Service Start: {{ 'OK' if nginx_start is succeeded else 'FAILED' }}
+          Health Check: {{ 'OK' if rollback_check.status == 200 else 'FAILED' }}
+
+          {% if rollback_check.status == 200 %}
+          ✅ Rollback successful - service restored
+          {% else %}
+          ❌ Rollback failed - manual intervention required!
+          {% endif %}
+
+    - name: Save error report
+      copy:
+        content: |
+          Nginx Deployment Failure Report
+          ================================
+          Time: {{ ansible_date_time.iso8601 }}
+          Host: {{ inventory_hostname }}
+          Failed Task: {{ ansible_failed_task.name }}
+          Error: {{ ansible_failed_result.msg | default('Unknown') }}
+
+          Rollback Status:
+          - Config Test: {{ 'OK' if rollback_config_test.rc == 0 else 'FAILED' }}
+          - Service: {{ 'Running' if nginx_start is succeeded else 'Stopped' }}
+          - Health Check: {{ 'OK' if rollback_check.status == 200 else 'FAILED' }}
+
+          Backup Locations:
+          - Config: {{ config_backup.dest | default('N/A') }}
+          - Content: {{ content_backup.dest | default('N/A') }}
+        dest: "{{ backup_dir }}/deployment_failure_{{ timestamp }}.log"
+        mode: '0644'
+
+    - name: Fail with rollback report
+      fail:
+        msg: |
+          Deployment failed and rollback completed.
+          Status: {{ 'Service restored' if rollback_check.status == 200 else 'Manual intervention required' }}
+          Report: {{ backup_dir }}/deployment_failure_{{ timestamp }}.log
+
+    always:
+    # Cleanup and logging
+    - name: Record deployment attempt
+      lineinfile:
+        path: "{{ backup_dir }}/deployment_history.log"
+        line: "{{ ansible_date_time.iso8601 }} | {{ nginx_version }} | {{ 'SUCCESS' if ansible_failed_task is not defined else 'FAILED' }} | {{ inventory_hostname }}"
+        create: yes
+        mode: '0644'
+
+    - name: Clean old backups (keep last 10)
+      shell: ls -t {{ backup_dir }}/*.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm
+      changed_when: false
+
+    - name: Count current backups
+      find:
+        paths: "{{ backup_dir }}"
+        patterns: "*.tar.gz"
+      register: total_backups
+
+    - name: Display deployment history
+      shell: tail -n 5 {{ backup_dir }}/deployment_history.log
+      register: deploy_history
+      changed_when: false
+
+    - name: Final status summary
+      debug:
+        msg: |
+          Deployment Summary
+          ==================
+          Status: {{ 'SUCCESS' if ansible_failed_task is not defined else 'FAILED (rolled back)' }}
+          Total backups: {{ total_backups.files | length }}
+
+          Recent deployments:
+          {{ deploy_history.stdout }}
+
+# Usage examples:
+#
+# Deploy latest nginx:
+#   ansible-playbook -i inventory.ini web-deployment.yml
+#
+# Deploy specific version:
+#   ansible-playbook -i inventory.ini web-deployment.yml -e "version=1.18.0-0ubuntu1"
+#
+# Check syntax only:
+#   ansible-playbook -i inventory.ini web-deployment.yml --syntax-check
+#
+# Dry run:
+#   ansible-playbook -i inventory.ini web-deployment.yml --check
+#
+# View deployment history:
+#   ansible webservers -i inventory.ini -m shell -a "cat /var/backups/nginx/deployment_history.log" --become

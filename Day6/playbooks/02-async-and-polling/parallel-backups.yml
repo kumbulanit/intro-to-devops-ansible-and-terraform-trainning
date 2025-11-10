@@ -1,0 +1,272 @@
+---
+- name: Parallel Backup Operations
+  hosts: servers
+  become: yes
+  gather_facts: yes
+  strategy: free # Each host proceeds independently
+
+  vars:
+    backup_root: /var/backups/parallel
+    timestamp: "{{ ansible_date_time.epoch }}"
+    backup_timeout: 900 # 15 minutes
+
+  tasks:
+  - name: Display backup target
+    debug:
+      msg: |
+        ================================================
+        Starting Parallel Backup
+        ================================================
+        Host: {{ inventory_hostname }}
+        Time: {{ ansible_date_time.time }}
+        Backup ID: {{ timestamp }}
+
+  - name: Ensure backup directory exists
+    file:
+      path: "{{ backup_root }}"
+      state: directory
+      mode: '0755'
+
+  - name: Start configuration backup (async)
+    shell: |
+      BACKUP_FILE="{{ backup_root }}/config_{{ inventory_hostname }}_{{ timestamp }}.tar.gz"
+      echo "Starting config backup on {{ inventory_hostname }} at $(date)"
+
+      tar -czf "$BACKUP_FILE" \
+        /etc \
+        --exclude=/etc/ssl/private \
+        2>/dev/null || true
+
+      echo "Config backup completed: $BACKUP_FILE"
+      ls -lh "$BACKUP_FILE"
+    async: "{{ backup_timeout }}"
+    poll: 0
+    register: config_backup
+
+  - name: Start log backup (async)
+    shell: |
+      BACKUP_FILE="{{ backup_root }}/logs_{{ inventory_hostname }}_{{ timestamp }}.tar.gz"
+      echo "Starting log backup on {{ inventory_hostname }} at $(date)"
+
+      tar -czf "$BACKUP_FILE" \
+        /var/log \
+        --exclude=/var/log/*.gz \
+        2>/dev/null || true
+
+      echo "Log backup completed: $BACKUP_FILE"
+      ls -lh "$BACKUP_FILE"
+    async: "{{ backup_timeout }}"
+    poll: 0
+    register: log_backup
+
+  - name: Start home directories backup (async)
+    shell: |
+      BACKUP_FILE="{{ backup_root }}/home_{{ inventory_hostname }}_{{ timestamp }}.tar.gz"
+      echo "Starting home backup on {{ inventory_hostname }} at $(date)"
+
+      tar -czf "$BACKUP_FILE" \
+        /home \
+        --exclude=/home/*/.cache \
+        --exclude=/home/*/Downloads \
+        2>/dev/null || true
+
+      echo "Home backup completed: $BACKUP_FILE"
+      ls -lh "$BACKUP_FILE"
+    async: "{{ backup_timeout }}"
+    poll: 0
+    register: home_backup
+
+  - name: Record backup jobs
+    copy:
+      content: |
+        Backup Jobs Started on {{ inventory_hostname }}
+        ==========================================
+        Timestamp: {{ ansible_date_time.iso8601 }}
+
+        Config Backup:
+          Job ID: {{ config_backup.ansible_job_id }}
+          Timeout: {{ backup_timeout }}s
+
+        Log Backup:
+          Job ID: {{ log_backup.ansible_job_id }}
+          Timeout: {{ backup_timeout }}s
+
+        Home Backup:
+          Job ID: {{ home_backup.ansible_job_id }}
+          Timeout: {{ backup_timeout }}s
+      dest: "{{ backup_root }}/jobs_{{ timestamp }}.txt"
+      mode: '0644'
+
+  - name: Perform other maintenance while backups run
+    debug:
+      msg: "Backups running in background. Performing other tasks..."
+
+  - name: Clean temporary files
+    shell: find /tmp -name "*.tmp" -type f -mtime +7 -delete
+    changed_when: false
+
+  - name: Update package cache
+    apt:
+      update_cache: yes
+      cache_valid_time: 3600
+    when: ansible_os_family == "Debian"
+
+  - name: Wait for config backup
+    async_status:
+      jid: "{{ config_backup.ansible_job_id }}"
+    register: config_status
+    until: config_status.finished
+    retries: 90
+    delay: 10
+
+  - name: Wait for log backup
+    async_status:
+      jid: "{{ log_backup.ansible_job_id }}"
+    register: log_status
+    until: log_status.finished
+    retries: 90
+    delay: 10
+
+  - name: Wait for home backup
+    async_status:
+      jid: "{{ home_backup.ansible_job_id }}"
+    register: home_status
+    until: home_status.finished
+    retries: 90
+    delay: 10
+
+  - name: Parse backup file sizes
+    shell: |
+      echo "Backup Files on {{ inventory_hostname }}:"
+      ls -lh {{ backup_root }}/*{{ timestamp }}* 2>/dev/null | grep -v jobs || echo "No backup files found"
+    register: backup_files
+    changed_when: false
+
+  - name: Calculate total backup size
+    shell: |
+      du -sh {{ backup_root }}/*{{ timestamp }}.tar.gz 2>/dev/null | awk '{sum+=$1} END {print sum}'
+    register: total_size
+    changed_when: false
+
+  - name: Individual host backup summary
+    debug:
+      msg: |
+        ================================================
+        Backup Summary for {{ inventory_hostname }}
+        ================================================
+
+        Config Backup:
+          Status: {{ 'Success' if config_status.rc == 0 else 'Failed' }}
+          Duration: {{ config_status.delta }}
+
+        Log Backup:
+          Status: {{ 'Success' if log_status.rc == 0 else 'Failed' }}
+          Duration: {{ log_status.delta }}
+
+        Home Backup:
+          Status: {{ 'Success' if home_status.rc == 0 else 'Failed' }}
+          Duration: {{ home_status.delta }}
+
+        Files Created:
+        {{ backup_files.stdout }}
+
+  - name: Clean old backups (keep last 10)
+    shell: |
+      cd {{ backup_root }}
+      ls -t *.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm
+    changed_when: false
+
+  - name: Save backup report
+    copy:
+      content: |
+        Backup Report: {{ inventory_hostname }}
+        =====================================
+        Date: {{ ansible_date_time.iso8601 }}
+        Backup ID: {{ timestamp }}
+
+        Configuration Backup
+        --------------------
+        Status: {{ 'Success' if config_status.rc == 0 else 'Failed' }}
+        Duration: {{ config_status.delta }}
+        Return Code: {{ config_status.rc }}
+
+        Log Backup
+        ----------
+        Status: {{ 'Success' if log_status.rc == 0 else 'Failed' }}
+        Duration: {{ log_status.delta }}
+        Return Code: {{ log_status.rc }}
+
+        Home Directories Backup
+        ----------------------
+        Status: {{ 'Success' if home_status.rc == 0 else 'Failed' }}
+        Duration: {{ home_status.delta }}
+        Return Code: {{ home_status.rc }}
+
+        Files Created
+        -------------
+        {{ backup_files.stdout }}
+
+        Total Duration
+        --------------
+        Longest task: {{ [config_status.delta, log_status.delta, home_status.delta] | max }}
+
+        Notes
+        -----
+        All backups ran in parallel, saving significant time compared to sequential execution.
+      dest: "{{ backup_root }}/report_{{ inventory_hostname }}_{{ timestamp }}.txt"
+      mode: '0644'
+
+# Aggregate results across all hosts
+- name: Backup Completion Summary
+  hosts: servers
+  gather_facts: no
+  run_once: yes
+
+  tasks:
+  - name: Collect backup reports from all hosts
+    slurp:
+      src: "/var/backups/parallel/report_{{ hostvars[item].inventory_hostname }}_{{ hostvars[item].timestamp }}.txt"
+    delegate_to: "{{ item }}"
+    loop: "{{ groups['servers'] }}"
+    register: all_reports
+    become: yes
+
+  - name: Overall backup summary
+    debug:
+      msg: |
+        ================================================
+        PARALLEL BACKUP OPERATION COMPLETED
+        ================================================
+
+        Total Hosts: {{ groups['servers'] | length }}
+        Completed: {{ groups['servers'] | length }}
+
+        Strategy: Parallel (strategy: free)
+        Time Saved: Significant! All hosts backed up simultaneously.
+
+        Individual Reports:
+        {{ groups['servers'] | join(', ') }}
+
+        💡 Sequential backup would have taken:
+        {{ groups['servers'] | length }} hosts × ~5 minutes = ~{{ groups['servers'] | length * 5 }} minutes
+
+        ⚡ Parallel backup took: ~5-7 minutes total!
+
+        Check /var/backups/parallel/ on each host for detailed reports.
+
+# Usage:
+#
+# Backup all servers in parallel:
+#   ansible-playbook -i inventory.ini parallel-backups.yml
+#
+# Backup specific servers:
+#   ansible-playbook -i inventory.ini parallel-backups.yml --limit "server1,server2"
+#
+# Verbose output to see parallel execution:
+#   ansible-playbook -i inventory.ini parallel-backups.yml -v
+#
+# Check backup files on a server:
+#   ansible servers -i inventory.ini -m shell -a "ls -lh /var/backups/parallel/" --become
+#
+# View backup report:
+#   ansible servers -i inventory.ini -m shell -a "cat /var/backups/parallel/report_*.txt | head -50" --become

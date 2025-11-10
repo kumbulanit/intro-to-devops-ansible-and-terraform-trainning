@@ -1,0 +1,240 @@
+---
+# Canary Deployment Example
+# Demonstrates staged rollout: canary → early adopter → general availability
+
+- name: Canary Deployment
+  hosts: webservers
+  serial:
+  - 1 # Canary - single server
+  - 25% # Early adopters - 25% of remaining (1 server out of 4 total)
+  - 100% # General availability - all remaining servers
+  gather_facts: no
+
+  vars:
+    app_version: "3.0.0"
+    app_dir: "/tmp/{{ inventory_hostname }}-app"
+    health_check_retries: 5
+    health_check_delay: 3
+
+  tasks:
+  #
+  # Determine deployment stage
+  #
+  - name: Identify deployment stage
+    set_fact:
+      deployment_stage: >-
+        {%- if ansible_play_batch | length == 1 and ansible_play_hosts_all.index(inventory_hostname) == 0 -%}
+          CANARY
+        {%- elif ansible_play_batch | length <= 2 and 'CANARY' not in deployment_stage | default('') -%}
+          EARLY_ADOPTER
+        {%- else -%}
+          GENERAL_AVAILABILITY
+        {%- endif -%}
+      stage_color: >-
+        {%- if ansible_play_batch | length == 1 -%}
+          🟡
+        {%- elif ansible_play_batch | length <= 2 -%}
+          🟠
+        {%- else -%}
+          🟢
+        {%- endif -%}
+
+  - name: Announce deployment stage
+    debug:
+      msg: |
+        
+        ╔═══════════════════════════════════════════════════════════╗
+        ║  {{ stage_color }} DEPLOYMENT STAGE: {{ deployment_stage }}
+        ╠═══════════════════════════════════════════════════════════╣
+        ║  Server: {{ inventory_hostname }}
+        ║  Batch: {{ ansible_play_batch }}
+        ║  Batch Size: {{ ansible_play_batch | length }} server(s)
+        ║  Total Progress: {{ ansible_play_hosts_all.index(inventory_hostname) + 1 }}/{{ ansible_play_hosts_all | length }}
+        ╚═══════════════════════════════════════════════════════════╝
+
+    run_once: true
+
+  #
+  # Pre-deployment checks
+  #
+  - name: Create app directory
+    file:
+      path: "{{ app_dir }}"
+      state: directory
+      mode: '0755'
+
+  - name: Check current version
+    shell: "grep -o 'version: [0-9.]*' {{ app_dir }}/app.jar 2>/dev/null || echo 'version: none'"
+    register: current_version
+    changed_when: false
+    failed_when: false
+
+  - name: Display current and target versions
+    debug:
+      msg: "{{ inventory_hostname }}: {{ current_version.stdout }} → version: {{ app_version }}"
+
+  #
+  # Deployment
+  #
+  - name: Remove from load balancer
+    debug:
+      msg: "[LB] Removing {{ inventory_hostname }} from load balancer pool"
+    delegate_to: lb1
+
+  - name: Backup current application
+    shell: |
+      if [ -f {{ app_dir }}/app.jar ]; then
+        cp {{ app_dir }}/app.jar {{ app_dir }}/app.jar.backup-{{ ansible_date_time.epoch }}
+        echo "Backup created"
+      else
+        echo "No backup needed - first deployment"
+      fi
+    register: backup_result
+
+  - name: Show backup result
+    debug:
+      msg: "{{ backup_result.stdout }}"
+
+  - name: Deploy new version
+    copy:
+      content: |
+        version: {{ app_version }}
+        stage: {{ deployment_stage }}
+        deployed: {{ ansible_date_time.iso8601 }}
+        server: {{ inventory_hostname }}
+        status: running
+      dest: "{{ app_dir }}/app.jar"
+    register: deployment
+
+  #
+  # Post-deployment validation
+  #
+  - name: Wait for application startup
+    pause:
+      seconds: "{{ 5 if deployment_stage == 'CANARY' else 3 }}"
+      prompt: "Waiting for {{ inventory_hostname }} to start..."
+
+  - name: Health check
+    shell: |
+      if grep -q "version: {{ app_version }}" {{ app_dir }}/app.jar && \
+         grep -q "status: running" {{ app_dir }}/app.jar; then
+        echo "HEALTHY"
+        exit 0
+      else
+        echo "UNHEALTHY"
+        exit 1
+      fi
+    register: health
+    retries: "{{ health_check_retries }}"
+    delay: "{{ health_check_delay }}"
+    until: health.rc == 0
+
+  - name: Verify version deployed correctly
+    assert:
+      that:
+      - "'HEALTHY' in health.stdout"
+      - deployment.changed
+      fail_msg: "Health check failed on {{ inventory_hostname }}"
+      success_msg: "✓ {{ inventory_hostname }} is healthy with version {{ app_version }}"
+
+  - name: Add back to load balancer
+    debug:
+      msg: "[LB] Adding {{ inventory_hostname }} back to load balancer pool"
+    delegate_to: lb1
+
+  - name: Record deployment
+    lineinfile:
+      path: /tmp/canary-deployment-log.txt
+      line: "{{ ansible_date_time.iso8601 }} | {{ deployment_stage }} | {{ inventory_hostname }} | {{ app_version }} | SUCCESS"
+      create: yes
+    delegate_to: localhost
+
+  #
+  # Stage-specific monitoring period
+  #
+  - name: Monitor canary deployment
+    pause:
+      seconds: 10
+      prompt: |
+        
+        ════════════════════════════════════════════════════════════
+        🟡 CANARY DEPLOYED: {{ inventory_hostname }}
+
+        Monitoring canary server for issues...
+        - Check metrics
+        - Watch error rates
+        - Monitor performance
+
+        Waiting 10 seconds before proceeding to early adopters...
+        ════════════════════════════════════════════════════════════
+
+    when:
+    - deployment_stage == "CANARY"
+    - inventory_hostname == ansible_play_batch[-1]
+
+  - name: Monitor early adopters
+    pause:
+      seconds: 7
+      prompt: |
+        
+        ════════════════════════════════════════════════════════════
+        🟠 EARLY ADOPTERS DEPLOYED: {{ ansible_play_batch }}
+
+        Monitoring early adopter servers...
+        - Validating canary + early adopters performance
+        - Checking for any issues
+
+        Waiting 7 seconds before general availability...
+        ════════════════════════════════════════════════════════════
+
+    when:
+    - deployment_stage == "EARLY_ADOPTER"
+    - inventory_hostname == ansible_play_batch[-1]
+
+  - name: Complete general availability
+    debug:
+      msg: |
+        
+        ════════════════════════════════════════════════════════════
+        🟢 GENERAL AVAILABILITY COMPLETE
+
+        All servers successfully deployed with version {{ app_version }}
+        Total servers: {{ ansible_play_hosts_all | length }}
+        Deployment strategy: Canary → Early Adopters → GA
+        ════════════════════════════════════════════════════════════
+
+    when:
+    - deployment_stage == "GENERAL_AVAILABILITY"
+    - inventory_hostname == ansible_play_batch[-1]
+    run_once: true
+
+# How to use:
+#
+# 1. Run the canary deployment:
+#    ansible-playbook -i inventory.ini canary-deployment.yml
+#
+# 2. Observe the three stages:
+#    Stage 1 (CANARY): web1 deployed first, monitored for 10 seconds
+#    Stage 2 (EARLY_ADOPTER): 25% more (web2) deployed, monitored for 7 seconds
+#    Stage 3 (GENERAL_AVAILABILITY): Remaining (web3, web4) deployed
+#
+# 3. Check deployment log:
+#    cat /tmp/canary-deployment-log.txt
+#
+# 4. Verify versions:
+#    for i in {1..4}; do
+#      echo "web${i}:"
+#      cat /tmp/web${i}-app/app.jar | grep version
+#    done
+#
+# Benefits of canary deployment:
+# - Risk mitigation: Issues detected on single server first
+# - Gradual rollout: Problems caught before affecting all servers
+# - Easy rollback: Can abort before deploying to all servers
+# - Confidence building: Each stage validates before proceeding
+#
+# Typical usage:
+# - Production deployments
+# - Critical applications
+# - Large server fleets
+# - High-risk changes

@@ -1,0 +1,178 @@
+---
+# Rolling Update Example
+# Demonstrates batch-based rolling updates with serial
+
+- name: Rolling Update with Serial
+  hosts: webservers
+  serial: 2 # Update 2 servers at a time
+  gather_facts: no
+
+  vars:
+    app_version: "2.5.0"
+    app_dir: "/tmp/{{ inventory_hostname }}-app"
+    lb_server: "lb1"
+
+  pre_tasks:
+  - name: Show batch information
+    debug:
+      msg: |
+        ╔════════════════════════════════════════════╗
+        ║         Rolling Update - Batch Info        ║
+        ╠════════════════════════════════════════════╣
+        ║ Total servers: {{ ansible_play_hosts_all | length }}
+        ║ Current batch: {{ ansible_play_batch }}
+        ║ Batch size: {{ ansible_play_batch | length }}
+        ║ Server: {{ inventory_hostname }}
+        ║ Position: {{ ansible_play_hosts_all.index(inventory_hostname) + 1 }}/{{ ansible_play_hosts_all | length }}
+        ╚════════════════════════════════════════════╝
+    run_once: true
+
+  tasks:
+  #
+  # Phase 1: Remove from load balancer
+  #
+  - name: Remove {{ inventory_hostname }} from load balancer
+    debug:
+      msg: "LB: Removing {{ inventory_hostname }} from pool"
+    delegate_to: "{{ lb_server }}"
+
+  - name: Simulate connection drain
+    pause:
+      seconds: 2
+      prompt: "Draining connections from {{ inventory_hostname }}"
+
+  #
+  # Phase 2: Backup and update
+  #
+  - name: Create app directory if not exists
+    file:
+      path: "{{ app_dir }}"
+      state: directory
+      mode: '0755'
+
+  - name: Check if app exists
+    stat:
+      path: "{{ app_dir }}/app.jar"
+    register: app_exists
+
+  - name: Create initial app if doesn't exist
+    copy:
+      content: "version: 1.0.0\nstatus: running"
+      dest: "{{ app_dir }}/app.jar"
+    when: not app_exists.stat.exists
+
+  - name: Backup current version
+    copy:
+      src: "{{ app_dir }}/app.jar"
+      dest: "{{ app_dir }}/app.jar.backup-{{ ansible_date_time.epoch }}"
+      remote_src: yes
+    when: app_exists.stat.exists
+
+  - name: Stop application
+    shell: echo "Stopping application on {{ inventory_hostname }}"
+    register: stop_app
+
+  - name: Deploy new version
+    copy:
+      content: "version: {{ app_version }}
+
+        status: stopped
+
+        updated: {{ ansible_date_time.iso8601 }}"
+      dest: "{{ app_dir }}/app.jar"
+    register: deploy
+
+  - name: Start application
+    shell: echo "Starting application on {{ inventory_hostname }}"
+    register: start_app
+
+  - name: Update status to running
+    lineinfile:
+      path: "{{ app_dir }}/app.jar"
+      regexp: '^status:'
+      line: 'status: running'
+
+  #
+  # Phase 3: Validate deployment
+  #
+  - name: Verify deployed version
+    shell: "grep 'version: {{ app_version }}' {{ app_dir }}/app.jar"
+    register: version_check
+    changed_when: false
+    retries: 3
+    delay: 2
+    until: version_check.rc == 0
+
+  - name: Health check
+    shell: "grep 'status: running' {{ app_dir }}/app.jar"
+    register: health_check
+    changed_when: false
+
+  - name: Assert deployment successful
+    assert:
+      that:
+      - version_check.rc == 0
+      - health_check.rc == 0
+      fail_msg: "Deployment verification failed on {{ inventory_hostname }}"
+      success_msg: "✓ {{ inventory_hostname }} updated to {{ app_version }}"
+
+  #
+  # Phase 4: Re-add to load balancer
+  #
+  - name: Add {{ inventory_hostname }} back to load balancer
+    debug:
+      msg: "LB: Adding {{ inventory_hostname }} back to pool"
+    delegate_to: "{{ lb_server }}"
+
+  - name: Verify server is serving traffic
+    debug:
+      msg: "✓ {{ inventory_hostname }} is now serving traffic with version {{ app_version }}"
+
+  #
+  # Phase 5: Wait before next batch
+  #
+  - name: Batch complete - wait before next batch
+    pause:
+      seconds: 5
+      prompt: |
+        
+        ════════════════════════════════════════════
+        Batch {{ ansible_play_batch }} completed successfully
+        Waiting 5 seconds before next batch...
+        ════════════════════════════════════════════
+
+    when: inventory_hostname == ansible_play_batch[-1]
+    # Only pause after last server in each batch
+
+  post_tasks:
+  - name: Record successful deployment
+    lineinfile:
+      path: /tmp/rolling-update-log.txt
+      line: "{{ ansible_date_time.iso8601 }} | {{ inventory_hostname }} | {{ app_version }} | SUCCESS"
+      create: yes
+    delegate_to: localhost
+
+# How to use:
+#
+# 1. Run the playbook:
+#    ansible-playbook -i inventory.ini rolling-update.yml
+#
+# 2. Observe the rolling update:
+#    - First batch: web1 and web2 update simultaneously
+#    - Pause for 5 seconds
+#    - Second batch: web3 and web4 update simultaneously
+#
+# 3. Check deployment log:
+#    cat /tmp/rolling-update-log.txt
+#
+# 4. Verify all servers updated:
+#    for i in {1..4}; do
+#      echo "web${i}:"
+#      cat /tmp/web${i}-app/app.jar
+#    done
+#
+# Change serial value:
+# - serial: 1      # One at a time (slowest, safest)
+# - serial: 2      # Two at a time
+# - serial: "50%"  # Half at a time
+# - serial: 4      # All at once (no rolling)

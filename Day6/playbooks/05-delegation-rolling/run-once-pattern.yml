@@ -1,0 +1,158 @@
+---
+# Run Once Pattern Example
+# Demonstrates single-execution tasks across multiple hosts
+
+- name: Run Once Pattern
+  hosts: webservers
+  gather_facts: yes
+
+  vars:
+    deployment_version: "3.0.0"
+    deployment_time: "{{ ansible_date_time.iso8601 }}"
+
+  tasks:
+  - name: Display host being processed
+    debug:
+      msg: "Processing {{ inventory_hostname }} ({{ ansible_play_hosts.index(inventory_hostname) + 1 }} of {{ ansible_play_hosts | length }})"
+
+  #
+  # Run once - creates resource only once, not per host
+  #
+  - name: Create shared deployment manifest (run once)
+    copy:
+      content: |
+        Deployment Manifest
+        ===================
+        Version: {{ deployment_version }}
+        Time: {{ deployment_time }}
+        Servers:
+        {% for host in ansible_play_hosts %}
+          - {{ host }}
+        {% endfor %}
+        Total Servers: {{ ansible_play_hosts | length }}
+      dest: /tmp/deployment-manifest.txt
+    delegate_to: localhost
+    run_once: true
+    # Creates file once, not 4 times (once per webserver)
+
+  - name: Send deployment start notification (run once)
+    shell: |
+      cat > /tmp/deployment-notification.txt << EOF
+      Subject: Deployment Started
+      To: ops-team@example.com
+      From: ansible@example.com
+
+      Starting deployment of version {{ deployment_version }}
+      Target: {{ groups['webservers'] | length }} webservers
+      Time: {{ deployment_time }}
+      Servers: {{ groups['webservers'] | join(', ') }}
+      EOF
+    delegate_to: localhost
+    run_once: true
+    # Sends one notification, not one per server
+
+  - name: Create shared configuration directory (run once)
+    file:
+      path: /tmp/shared-deployment-config
+      state: directory
+      mode: '0755'
+    delegate_to: localhost
+    run_once: true
+
+  - name: Generate shared configuration file (run once)
+    copy:
+      content: |
+        # Shared Configuration for {{ deployment_version }}
+        [deployment]
+        version = {{ deployment_version }}
+        timestamp = {{ deployment_time }}
+        total_servers = {{ groups['webservers'] | length }}
+
+        [servers]
+        {% for host in groups['webservers'] %}
+        server{{ loop.index }} = {{ host }}
+        {% endfor %}
+      dest: /tmp/shared-deployment-config/config.ini
+    delegate_to: localhost
+    run_once: true
+
+  #
+  # Each host reads the shared resource
+  #
+  - name: Each server reads shared configuration
+    slurp:
+      path: /tmp/shared-deployment-config/config.ini
+    delegate_to: localhost
+    register: shared_config
+
+  - name: Display shared config (each server)
+    debug:
+      msg: "{{ inventory_hostname }} sees: {{ shared_config.content | b64decode | regex_findall('version = (.+)') | first }}"
+
+  #
+  # Run once with condition
+  #
+  - name: Create backup of previous deployment (run once, conditional)
+    command: echo "Backing up previous deployment"
+    delegate_to: localhost
+    run_once: true
+    when: deployment_version != "1.0.0"
+    register: backup_result
+
+  - name: Show backup result
+    debug:
+      msg: "Backup performed: {{ backup_result.stdout | default('Skipped - first deployment') }}"
+    run_once: true
+
+  #
+  # Run once at the end (after all hosts processed)
+  #
+  - name: All servers completed deployment
+    debug:
+      msg: "Server {{ inventory_hostname }} deployment complete"
+
+  - name: Send deployment complete notification (run once)
+    shell: |
+      cat > /tmp/deployment-complete.txt << EOF
+      Subject: Deployment Complete
+      To: ops-team@example.com
+
+      Successfully deployed version {{ deployment_version }}
+      Completed: {{ ansible_play_hosts | length }}/{{ ansible_play_hosts | length }} servers
+      Status: SUCCESS
+      EOF
+    delegate_to: localhost
+    run_once: true
+    when: ansible_play_hosts_all | length == ansible_play_hosts | length
+    # Only sends if all hosts succeeded
+
+  - name: Update deployment history (run once)
+    lineinfile:
+      path: /tmp/deployment-history.log
+      line: "{{ deployment_time }} | v{{ deployment_version }} | {{ ansible_play_hosts | length }} servers | SUCCESS"
+      create: yes
+    delegate_to: localhost
+    run_once: true
+
+# How to use:
+#
+# 1. Run the playbook:
+#    ansible-playbook -i inventory.ini run-once-pattern.yml
+#
+# 2. Check created files:
+#    cat /tmp/deployment-manifest.txt
+#    cat /tmp/deployment-notification.txt
+#    cat /tmp/shared-deployment-config/config.ini
+#    cat /tmp/deployment-complete.txt
+#    cat /tmp/deployment-history.log
+#
+# 3. Observe:
+#    - Manifest created once (not 4 times)
+#    - One notification sent (not 4)
+#    - All servers read same shared config
+#    - Completion notification only sent if all succeeded
+#
+# Key benefits:
+# - Efficiency: Shared resources created once
+# - Consistency: All servers see same configuration
+# - Coordination: Single point of notification/logging

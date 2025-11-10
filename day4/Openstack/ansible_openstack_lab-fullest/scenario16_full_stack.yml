@@ -147,6 +147,40 @@
       state: present
     loop: "{{ range(1, web_count + 1) | list }}"
 
+  - name: Wait for web volumes to be ready
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ web_prefix }}{{ item }}-volume"
+    register: web_volume_wait
+    until:
+    - web_volume_wait.volumes | length > 0
+    - web_volume_wait.volumes[0].status in ['available', 'in-use', 'error']
+    retries: 30
+    delay: 5
+    failed_when: web_volume_wait.volumes[0].status == 'error'
+    loop: "{{ range(1, web_count + 1) | list }}"
+    loop_control:
+      label: "{{ web_prefix }}{{ item }}-volume"
+
+  - name: Ensure web volumes remain bootable
+    command: "openstack volume set --bootable {{ web_prefix }}{{ item }}-volume"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+    loop: "{{ range(1, web_count + 1) | list }}"
+    loop_control:
+      label: "{{ web_prefix }}{{ item }}-volume"
+
+  - name: Display web volume readiness
+    debug:
+      msg: |
+        Volume {{ item.item }} ready:
+          Name: {{ item.volumes[0].name }}
+          ID: {{ item.volumes[0].id }}
+          Status: {{ item.volumes[0].status }}
+          Bootable: {{ item.volumes[0].is_bootable }}
+    loop: "{{ web_volume_wait.results }}"
+
   - name: Create volume for database server
     openstack.cloud.volume:
       cloud: "{{ cloud_name }}"
@@ -156,6 +190,33 @@
       bootable: true
       state: present
 
+  - name: Wait for database volume to be ready
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ db_name }}-volume"
+    register: db_volume_info
+    until:
+    - db_volume_info.volumes | length > 0
+    - db_volume_info.volumes[0].status in ['available', 'in-use', 'error']
+    retries: 30
+    delay: 5
+    failed_when: db_volume_info.volumes[0].status == 'error'
+
+  - name: Ensure database volume boot flag is set
+    command: "openstack volume set --bootable {{ db_name }}-volume"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+
+  - name: Show database volume readiness
+    debug:
+      msg: |
+        Volume ready:
+          Name: {{ db_volume_info.volumes[0].name }}
+          ID: {{ db_volume_info.volumes[0].id }}
+          Status: {{ db_volume_info.volumes[0].status }}
+          Bootable: {{ db_volume_info.volumes[0].is_bootable }}
+
   - name: Create volume for load balancer
     openstack.cloud.volume:
       cloud: "{{ cloud_name }}"
@@ -164,6 +225,33 @@
       image: "{{ image_name }}"
       bootable: true
       state: present
+
+  - name: Wait for load balancer volume to be ready
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ lb_name }}-volume"
+    register: lb_volume_info
+    until:
+    - lb_volume_info.volumes | length > 0
+    - lb_volume_info.volumes[0].status in ['available', 'in-use', 'error']
+    retries: 30
+    delay: 5
+    failed_when: lb_volume_info.volumes[0].status == 'error'
+
+  - name: Ensure load balancer volume boot flag is set
+    command: "openstack volume set --bootable {{ lb_name }}-volume"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+
+  - name: Show load balancer volume readiness
+    debug:
+      msg: |
+        Volume ready:
+          Name: {{ lb_volume_info.volumes[0].name }}
+          ID: {{ lb_volume_info.volumes[0].id }}
+          Status: {{ lb_volume_info.volumes[0].status }}
+          Bootable: {{ lb_volume_info.volumes[0].is_bootable }}
 
   # Deploy VMs
   - name: Deploy database server

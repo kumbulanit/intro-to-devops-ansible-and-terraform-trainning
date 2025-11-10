@@ -125,6 +125,43 @@
     - "{{ frontend_volume }}"
     - "{{ backend_volume }}"
 
+  - name: Wait for volumes to be ready
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ item }}"
+    register: volume_wait_results
+    until:
+    - volume_wait_results.volumes | length > 0
+    - volume_wait_results.volumes[0].status in ['available', 'in-use', 'error']
+    retries: 30
+    delay: 5
+    failed_when: volume_wait_results.volumes[0].status == 'error'
+    loop:
+    - "{{ frontend_volume }}"
+    - "{{ backend_volume }}"
+    loop_control:
+      label: "{{ item }}"
+
+  - name: Ensure bootable flag is set on volumes
+    command: "openstack volume set --bootable {{ item }}"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+    loop:
+    - "{{ frontend_volume }}"
+    - "{{ backend_volume }}"
+    loop_control:
+      label: "{{ item }}"
+
+  - name: Show volume readiness details
+    debug:
+      msg: |
+        Volume {{ item.item }} ready:
+          ID: {{ item.volumes[0].id }}
+          Status: {{ item.volumes[0].status }}
+          Bootable: {{ item.volumes[0].is_bootable }}
+    loop: "{{ volume_wait_results.results }}"
+
   - name: Create frontend VM
     openstack.cloud.server:
       cloud: "{{ cloud_name }}"

@@ -1,0 +1,254 @@
+---
+# Production Debugging Pattern
+# This playbook demonstrates safe debugging practices for production environments
+
+- name: Production-Safe Debugging
+  hosts: local
+  gather_facts: yes
+  become: no
+  debugger: on_failed # Only debug failures in production
+
+  vars:
+    environment: "production" # Can be: development, staging, production
+    enable_debug: false # Override with: -e "enable_debug=true"
+    app_name: "production-app"
+    app_version: "3.0.0"
+    deploy_path: "/tmp/production-deploy"
+    min_disk_space: 80 # Minimum percentage available
+
+  pre_tasks:
+  - name: Set debug strategy based on environment
+    set_fact:
+      debug_strategy: "{{ 'always' if enable_debug and environment != 'production' else 'on_failed' }}"
+
+  - name: Display environment info
+    debug:
+      msg: |
+        Environment: {{ environment }}
+        Debug mode: {{ enable_debug }}
+        Debug strategy: {{ debug_strategy }}
+
+  tasks:
+  #
+  # Pre-deployment validation with strategic debugging
+  #
+  - name: Pre-deployment validation
+    block:
+    - name: Check disk space
+      shell: df -h / | tail -1 | awk '{print $5}' | sed 's/%//'
+      register: disk_usage
+      changed_when: false
+
+    - name: Validate disk space
+      assert:
+        that:
+        - disk_usage.stdout | int < min_disk_space
+        fail_msg: "Insufficient disk space: {{ disk_usage.stdout }}% used (max: {{ min_disk_space }}%)"
+        success_msg: "Disk space OK: {{ disk_usage.stdout }}% used"
+      debugger: "{{ debug_strategy }}"
+      # In debug: p disk_usage.stdout
+      #           p min_disk_space
+
+    - name: Verify deployment directory doesn't exist
+      stat:
+        path: "{{ deploy_path }}"
+      register: deploy_dir_check
+
+    - name: Fail if deployment directory exists (safety check)
+      assert:
+        that:
+        - not deploy_dir_check.stat.exists
+        fail_msg: "Deployment directory already exists: {{ deploy_path }}"
+      debugger: "{{ debug_strategy }}"
+      # In debug: p deploy_dir_check.stat
+      #           p deploy_path
+
+    - name: Check prerequisites are installed
+      command: which python3
+      register: python_check
+      failed_when: false
+      changed_when: false
+
+    - name: Verify Python is available
+      assert:
+        that:
+        - python_check.rc == 0
+        fail_msg: "Python3 not found in PATH"
+      debugger: "{{ debug_strategy }}"
+
+    rescue:
+    - name: Pre-deployment validation failed
+      debug:
+        msg: |
+          ⚠️  PRE-DEPLOYMENT VALIDATION FAILED ⚠️
+          Environment: {{ environment }}
+          Failed checks detected. Review debug output above.
+      debugger: always # Always debug rescue blocks
+
+    - name: Abort deployment
+      fail:
+        msg: "Deployment aborted due to failed pre-deployment checks"
+
+  #
+  # Deployment tasks (only run if validation passes)
+  #
+  - name: Create deployment directory
+    file:
+      path: "{{ deploy_path }}"
+      state: directory
+      mode: '0755'
+    register: dir_creation
+    debugger: "{{ debug_strategy }}"
+
+  - name: Deploy application files
+    block:
+    - name: Create application structure
+      file:
+        path: "{{ deploy_path }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+      - bin
+      - conf
+      - logs
+      - data
+
+    - name: Create application script
+      copy:
+        content: |
+          #!/bin/bash
+          echo "{{ app_name }} version {{ app_version }}"
+          echo "Running in {{ environment }} environment"
+        dest: "{{ deploy_path }}/bin/start.sh"
+        mode: '0755'
+      register: script_deploy
+      debugger: "{{ debug_strategy }}"
+
+    - name: Create configuration file
+      copy:
+        content: |
+          app_name: {{ app_name }}
+          version: {{ app_version }}
+          environment: {{ environment }}
+          log_level: {{ 'DEBUG' if environment != 'production' else 'INFO' }}
+        dest: "{{ deploy_path }}/conf/app.conf"
+      register: config_deploy
+      debugger: "{{ debug_strategy }}"
+
+    rescue:
+    - name: Deployment failed - initiate rollback
+      debug:
+        msg: "Deployment failed, cleaning up..."
+      debugger: always # Always debug deployment failures
+
+    - name: Remove failed deployment
+      file:
+        path: "{{ deploy_path }}"
+        state: absent
+
+    - name: Fail with detailed message
+      fail:
+        msg: "Deployment failed and rolled back. Check logs for details."
+
+  #
+  # Post-deployment validation
+  #
+  - name: Post-deployment validation
+    block:
+    - name: Verify application script exists
+      stat:
+        path: "{{ deploy_path }}/bin/start.sh"
+      register: script_check
+
+    - name: Assert script is executable
+      assert:
+        that:
+        - script_check.stat.exists
+        - script_check.stat.executable
+        fail_msg: "Application script not properly deployed"
+      debugger: "{{ 'always' if environment == 'production' else debug_strategy }}"
+      # Extra debugging for production
+
+    - name: Test application execution
+      command: "{{ deploy_path }}/bin/start.sh"
+      register: app_test
+      changed_when: false
+      debugger: "{{ debug_strategy }}"
+
+    - name: Validate application output
+      assert:
+        that:
+        - app_name in app_test.stdout
+        - app_version in app_test.stdout
+        - environment in app_test.stdout
+        fail_msg: "Application test failed: {{ app_test.stdout }}"
+      debugger: "{{ 'always' if environment == 'production' else debug_strategy }}"
+
+    rescue:
+    - name: Post-deployment validation failed
+      debug:
+        msg: "⚠️  Deployment succeeded but validation failed"
+      debugger: always
+
+    - name: Manual intervention required
+      fail:
+        msg: "Deployment requires manual verification"
+
+  post_tasks:
+  - name: Deployment successful
+    debug:
+      msg: |
+        ✅ DEPLOYMENT SUCCESSFUL ✅
+        Application: {{ app_name }}
+        Version: {{ app_version }}
+        Environment: {{ environment }}
+        Location: {{ deploy_path }}
+
+        Start with: {{ deploy_path }}/bin/start.sh
+
+# Usage examples:
+#
+# 1. Production deployment (debug only failures):
+#    ansible-playbook -i inventory.ini production-debugging.yml
+#
+# 2. Development with full debugging:
+#    ansible-playbook -i inventory.ini production-debugging.yml \
+#      -e "environment=development" \
+#      -e "enable_debug=true"
+#
+# 3. Staging with selective debugging:
+#    ansible-playbook -i inventory.ini production-debugging.yml \
+#      -e "environment=staging" \
+#      -e "enable_debug=true"
+#
+# 4. Production with enhanced debugging (careful!):
+#    ansible-playbook -i inventory.ini production-debugging.yml \
+#      -e "enable_debug=true"
+#
+# 5. Test validation failure:
+#    ansible-playbook -i inventory.ini production-debugging.yml \
+#      -e "deploy_path=/tmp/existing-dir" \
+#      -e "enable_debug=true"
+#
+# Debug session examples:
+#
+# When disk space check fails:
+#   [localhost] TASK: Validate disk space (debug)> p disk_usage.stdout
+#   '85'
+#   [localhost] TASK: Validate disk space (debug)> p min_disk_space
+#   80
+#   [localhost] TASK: Validate disk space (debug)> min_disk_space = 90
+#   [localhost] TASK: Validate disk space (debug)> redo
+#
+# When deployment directory exists:
+#   [localhost] TASK: Fail if deployment directory exists (debug)> p deploy_path
+#   '/tmp/production-deploy'
+#   [localhost] TASK: Fail if deployment directory exists (debug)> p deploy_dir_check.stat.exists
+#   True
+#   [localhost] TASK: Fail if deployment directory exists (debug)> deploy_path = '/tmp/production-deploy-v2'
+#   [localhost] TASK: Fail if deployment directory exists (debug)> redo
+#
+# In rescue block:
+#   [localhost] TASK: Pre-deployment validation failed (debug)> p vars
+#   (shows all variables for troubleshooting)
+#   [localhost] TASK: Pre-deployment validation failed (debug)> c

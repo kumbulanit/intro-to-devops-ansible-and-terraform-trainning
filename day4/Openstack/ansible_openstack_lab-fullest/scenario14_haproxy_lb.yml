@@ -103,6 +103,40 @@
       state: present
     loop: "{{ range(1, backend_count + 1) | list }}"
 
+  - name: Wait for backend volumes to be ready
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ backend_prefix }}{{ item }}-volume"
+    register: backend_volume_wait
+    until:
+    - backend_volume_wait.volumes | length > 0
+    - backend_volume_wait.volumes[0].status in ['available', 'in-use', 'error']
+    retries: 30
+    delay: 5
+    failed_when: backend_volume_wait.volumes[0].status == 'error'
+    loop: "{{ range(1, backend_count + 1) | list }}"
+    loop_control:
+      label: "{{ backend_prefix }}{{ item }}-volume"
+
+  - name: Ensure backend volumes remain bootable
+    command: "openstack volume set --bootable {{ backend_prefix }}{{ item }}-volume"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+    loop: "{{ range(1, backend_count + 1) | list }}"
+    loop_control:
+      label: "{{ backend_prefix }}{{ item }}-volume"
+
+  - name: Display backend volume readiness
+    debug:
+      msg: |
+        Volume {{ item.item }} ready:
+          Name: {{ item.volumes[0].name }}
+          ID: {{ item.volumes[0].id }}
+          Status: {{ item.volumes[0].status }}
+          Bootable: {{ item.volumes[0].is_bootable }}
+    loop: "{{ backend_volume_wait.results }}"
+
   - name: Deploy backend VMs
     openstack.cloud.server:
       cloud: "{{ cloud_name }}"
@@ -132,6 +166,33 @@
       bootable: true
       state: present
     register: haproxy_volume_result
+
+  - name: Wait for HAProxy volume to be ready
+    openstack.cloud.volume_info:
+      cloud: "{{ cloud_name }}"
+      name: "{{ haproxy_volume }}"
+    register: haproxy_volume_info
+    until:
+    - haproxy_volume_info.volumes | length > 0
+    - haproxy_volume_info.volumes[0].status in ['available', 'in-use', 'error']
+    retries: 30
+    delay: 5
+    failed_when: haproxy_volume_info.volumes[0].status == 'error'
+
+  - name: Ensure HAProxy volume boot flag is set
+    command: "openstack volume set --bootable {{ haproxy_volume }}"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    ignore_errors: yes
+
+  - name: Show HAProxy volume readiness
+    debug:
+      msg: |
+        Volume ready:
+          Name: {{ haproxy_volume_info.volumes[0].name }}
+          ID: {{ haproxy_volume_info.volumes[0].id }}
+          Status: {{ haproxy_volume_info.volumes[0].status }}
+          Bootable: {{ haproxy_volume_info.volumes[0].is_bootable }}
 
   - name: Deploy HAProxy VM
     openstack.cloud.server:
