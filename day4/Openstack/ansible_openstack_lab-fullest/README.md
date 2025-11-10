@@ -147,6 +147,35 @@ clouds:
 - Replace credentials (`username`, `password`, `project_name`) with your actual values
 - All scenario playbooks use `cloud_name: "mycloud"` by default
 
+### 🔑 Granting Admin Permissions (Demo Environments)
+
+If you encounter **403 Forbidden** or **Access Denied** errors (especially with volume creation), you need to grant admin permissions to your OpenStack users.
+
+**Quick Fix - Run this script on your OpenStack controller:**
+
+```bash
+./grant_admin_access.sh
+```
+
+This script will automatically grant admin role to all OpenStack users in all projects (for demo/training purposes only).
+
+**Manual Alternative:**
+
+```bash
+# Grant admin to demo user
+export OS_AUTH_URL=http://10.0.3.15/identity
+export OS_PROJECT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=secret
+export OS_USER_DOMAIN_NAME=Default
+export OS_PROJECT_DOMAIN_NAME=Default
+
+openstack role add --user demo --project demo admin
+```
+
+📖 **See [GRANT_ADMIN_INSTRUCTIONS.md](GRANT_ADMIN_INSTRUCTIONS.md) for detailed instructions**
+
+⚠️ **Note:** This is for demo/training environments only! Do not use in production.
 
 ## ▶️ Running Scenarios
 
