@@ -4,7 +4,7 @@
   gather_facts: false
   vars:
     cloud_name: "mycloud"
-    image_name: "ubuntu"
+    image_name: "ubuntu-22.04"
     flavor_name: "m1.small"
     network_name: "private"
     keypair_name: "demo-key"
@@ -50,7 +50,12 @@
       port_range_min: 22
       port_range_max: 22
       remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
       state: present
+    register: ssh_rule
+    failed_when:
+      - ssh_rule.failed
+      - "'already exists' not in ssh_rule.msg | default('')"
 
   - name: Add ICMP rule to security group
     openstack.cloud.security_group_rule:
@@ -58,7 +63,12 @@
       security_group: "{{ security_group_name }}"
       protocol: icmp
       remote_ip_prefix: 0.0.0.0/0
+      direction: ingress
       state: present
+    register: icmp_rule
+    failed_when:
+      - icmp_rule.failed
+      - "'already exists' not in icmp_rule.msg | default('')"
 
   - name: Create SSH keypair if it doesn't exist
     openstack.cloud.keypair:

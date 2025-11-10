@@ -103,32 +103,20 @@ ansible-playbook scenario1_basic_vm.yml
 
 ## 🔐 Configuration
 
+### OpenStack Endpoint
+
+All scenarios are configured to use OpenStack at **10.0.3.15**. This endpoint is configured in `clouds.yaml`.
+
 ### OpenStack Authentication
 
-Create or edit `clouds.yaml` in the lab directory:
+Create or edit `clouds.yaml` in the lab directory or at `~/.config/openstack/clouds.yaml`:
 
 ```yaml
 clouds:
   mycloud:
-    auth:
-      auth_url: https://your-openstack:5000/v3
-      username: your-username
-      password: your-password
-      project_name: your-project
-      user_domain_name: Default
-      project_domain_name: Default
-    region_name: RegionOne
-    interface: public
-    identity_api_version: 3
-```
-
-**For DevStack:**
-```yaml
-clouds:
-  devstack:
     region_name: RegionOne
     auth:
-      auth_url: http://127.0.0.1/identity
+      auth_url: http://10.0.3.15/identity
       username: demo
       password: secret
       project_name: demo
@@ -137,6 +125,27 @@ clouds:
     interface: public
     identity_api_version: 3
 ```
+
+**For DevStack (Alternative Configuration):**
+```yaml
+clouds:
+  devstack:
+    region_name: RegionOne
+    auth:
+      auth_url: http://10.0.3.15/identity
+      username: demo
+      password: secret
+      project_name: demo
+      user_domain_name: Default
+      project_domain_name: Default
+    interface: public
+    identity_api_version: 3
+```
+
+**Important:** 
+- The default OpenStack endpoint is `http://10.0.3.15/identity`
+- Replace credentials (`username`, `password`, `project_name`) with your actual values
+- All scenario playbooks use `cloud_name: "mycloud"` by default
 
 
 ## ▶️ Running Scenarios
