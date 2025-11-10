@@ -39,6 +39,9 @@ cd day4/Openstack/ansible_openstack_lab-fullest/
 # Configure OpenStack credentials
 # Edit clouds.yaml with your OpenStack details
 
+# Setup images (RECOMMENDED FIRST STEP)
+ansible-playbook scenario0_prerequisites.yml
+
 # Test connection
 ansible-playbook test-openstack.yml
 

@@ -1,0 +1,201 @@
+---
+- name: OpenStack Prerequisites - Download and Upload Lightweight Images
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cloud_name: "mycloud"
+    download_dir: "/tmp/openstack_images"
+
+    # Lightweight images for demo purposes
+    images:
+    - name: "cirros-0.6.2"
+      url: "https://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img"
+      format: "qcow2"
+      min_disk: 1
+      min_ram: 64
+      description: "Tiny Linux (13MB) - Perfect for testing"
+
+    - name: "ubuntu-22.04"
+      url: "https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
+      format: "qcow2"
+      min_disk: 3
+      min_ram: 512
+      description: "Ubuntu 22.04 LTS Server (600MB)"
+
+    - name: "debian-12"
+      url: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
+      format: "qcow2"
+      min_disk: 2
+      min_ram: 512
+      description: "Debian 12 Bookworm (400MB)"
+
+    - name: "alpine-3.19"
+      url: "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/cloud/alpine-virt-3.19.0-x86_64.qcow2"
+      format: "qcow2"
+      min_disk: 1
+      min_ram: 256
+      description: "Alpine Linux 3.19 (50MB) - Very lightweight"
+
+    - name: "fedora-39"
+      url: "https://download.fedoraproject.org/pub/fedora/linux/releases/39/Cloud/x86_64/images/Fedora-Cloud-Base-39-1.5.x86_64.qcow2"
+      format: "qcow2"
+      min_disk: 4
+      min_ram: 768
+      description: "Fedora 39 Cloud Base (500MB)"
+
+  tasks:
+  - name: Display prerequisite information
+    debug:
+      msg: |
+        ╔════════════════════════════════════════════════════════════════╗
+        ║     OpenStack Image Prerequisites Setup                       ║
+        ║     This playbook will download and upload 5 images:          ║
+        ║     1. CirrOS 0.6.2 (13MB) - Minimal test image              ║
+        ║     2. Ubuntu 22.04 LTS (600MB) - Production ready           ║
+        ║     3. Debian 12 (400MB) - Stable release                    ║
+        ║     4. Alpine 3.19 (50MB) - Ultra lightweight                ║
+        ║     5. Fedora 39 (500MB) - Latest features                   ║
+        ╚════════════════════════════════════════════════════════════════╝
+
+  - name: Create download directory
+    file:
+      path: "{{ download_dir }}"
+      state: directory
+      mode: '0755'
+
+  - name: Check which images already exist in OpenStack
+    openstack.cloud.image_info:
+      cloud: "{{ cloud_name }}"
+      image: "{{ item.name }}"
+    loop: "{{ images }}"
+    register: existing_images
+    ignore_errors: yes
+
+  - name: Display existing images status
+    debug:
+      msg: "Image '{{ item.item.name }}' {{ 'already exists' if item.images | length > 0 else 'needs to be uploaded' }}"
+    loop: "{{ existing_images.results }}"
+    loop_control:
+      label: "{{ item.item.name }}"
+
+  - name: Download images (this may take several minutes)
+    get_url:
+      url: "{{ item.item.url }}"
+      dest: "{{ download_dir }}/{{ item.item.name }}.{{ item.item.format }}"
+      mode: '0644'
+      timeout: 600
+    loop: "{{ existing_images.results }}"
+    when: item.images | length == 0
+    register: download_result
+    loop_control:
+      label: "{{ item.item.name }}"
+
+  - name: Display download progress
+    debug:
+      msg: |
+        Downloaded: {{ item.item.item.name }}
+        Size: {{ (item.size | default(0) / 1024 / 1024) | round(2) }} MB
+        Location: {{ download_dir }}/{{ item.item.item.name }}.{{ item.item.item.format }}
+    loop: "{{ download_result.results }}"
+    when:
+    - item is defined
+    - item.changed | default(false)
+    loop_control:
+      label: "{{ item.item.item.name }}"
+
+  - name: Upload images to OpenStack Glance
+    openstack.cloud.image:
+      cloud: "{{ cloud_name }}"
+      name: "{{ item.item.name }}"
+      filename: "{{ download_dir }}/{{ item.item.name }}.{{ item.item.format }}"
+      disk_format: "{{ item.item.format }}"
+      container_format: "bare"
+      min_disk: "{{ item.item.min_disk }}"
+      min_ram: "{{ item.item.min_ram }}"
+      is_public: true
+      state: present
+      properties:
+        os_type: "linux"
+        description: "{{ item.item.description }}"
+    loop: "{{ existing_images.results }}"
+    when: item.images | length == 0
+    register: upload_result
+    loop_control:
+      label: "{{ item.item.name }}"
+
+  - name: Wait for images to become active
+    openstack.cloud.image_info:
+      cloud: "{{ cloud_name }}"
+      image: "{{ item.item.name }}"
+    loop: "{{ existing_images.results }}"
+    when: item.images | length == 0
+    register: image_status
+    until: image_status.images[0].status == 'active'
+    retries: 30
+    delay: 10
+    loop_control:
+      label: "{{ item.item.name }}"
+    ignore_errors: yes
+
+  - name: Verify all images are bootable
+    openstack.cloud.image:
+      cloud: "{{ cloud_name }}"
+      name: "{{ item.name }}"
+      properties:
+        bootable: "true"
+      state: present
+    loop: "{{ images }}"
+    loop_control:
+      label: "{{ item.name }}"
+
+  - name: Get final image list from OpenStack
+    openstack.cloud.image_info:
+      cloud: "{{ cloud_name }}"
+    register: final_images
+
+  - name: Display uploaded images summary
+    debug:
+      msg: |
+        ╔════════════════════════════════════════════════════════════════╗
+        ║              Images Successfully Configured                    ║
+        ╚════════════════════════════════════════════════════════════════╝
+
+        Available Images:
+        {% for img in final_images.images | selectattr('name', 'in', images | map(attribute='name') | list) %}
+        ✓ {{ img.name }}
+          - ID: {{ img.id }}
+          - Status: {{ img.status }}
+          - Size: {{ (img.size / 1024 / 1024) | round(2) }} MB
+          - Min Disk: {{ img.min_disk }} GB
+          - Min RAM: {{ img.min_ram }} MB
+          - Bootable: {{ img.properties.bootable | default('true') }}
+        {% endfor %}
+
+        Images are ready for use in your OpenStack scenarios!
+
+  - name: Clean up downloaded image files (optional)
+    file:
+      path: "{{ download_dir }}"
+      state: absent
+    when: cleanup_downloads | default(false) | bool
+
+  - name: Display next steps
+    debug:
+      msg: |
+        ╔════════════════════════════════════════════════════════════════╗
+        ║                      Next Steps                                ║
+        ╚════════════════════════════════════════════════════════════════╝
+
+        1. Images are now available in OpenStack Glance
+        2. You can list them with: openstack image list
+        3. Run any scenario playbook, for example:
+           ansible-playbook scenario1_basic_vm.yml
+
+        Quick Image Reference:
+        - cirros-0.6.2: Fastest boot, minimal testing
+        - ubuntu-22.04: Production workloads, full Ubuntu features
+        - debian-12: Stable, reliable, Debian ecosystem
+        - alpine-3.19: Ultra-light, container-friendly
+        - fedora-39: Latest packages, cutting edge features
+
+        All images are cloud-init enabled and bootable!

@@ -1,0 +1,54 @@
+---
+- name: OpenStack Prerequisites - Remove Demo Images
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cloud_name: "mycloud"
+
+    # Images to remove
+    image_names:
+    - "cirros-0.6.2"
+    - "ubuntu-22.04"
+    - "debian-12"
+    - "alpine-3.19"
+    - "fedora-39"
+
+  tasks:
+  - name: Display cleanup information
+    debug:
+      msg: |
+        ╔════════════════════════════════════════════════════════════════╗
+        ║     OpenStack Image Prerequisites Cleanup                     ║
+        ║     This will remove all demo images from OpenStack           ║
+        ╚════════════════════════════════════════════════════════════════╝
+
+  - name: Check which images exist
+    openstack.cloud.image_info:
+      cloud: "{{ cloud_name }}"
+    register: existing_images
+
+  - name: Display images to be removed
+    debug:
+      msg: "Will remove: {{ item }}"
+    loop: "{{ image_names }}"
+    when: item in (existing_images.images | map(attribute='name') | list)
+
+  - name: Remove images from OpenStack
+    openstack.cloud.image:
+      cloud: "{{ cloud_name }}"
+      name: "{{ item }}"
+      state: absent
+    loop: "{{ image_names }}"
+    register: remove_result
+    ignore_errors: yes
+
+  - name: Display removal results
+    debug:
+      msg: |
+        ╔════════════════════════════════════════════════════════════════╗
+        ║              Images Cleanup Complete                          ║
+        ╚════════════════════════════════════════════════════════════════╝
+
+        Removed {{ remove_result.results | selectattr('changed') | list | length }} images.
+
+        You can verify with: openstack image list
