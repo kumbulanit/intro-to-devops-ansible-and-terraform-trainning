@@ -91,12 +91,16 @@
       filters:
         id: "{{ created_volume_id }}"
     register: volume_check
-    until:
-    - volume_check.volumes | length > 0
-    - volume_check.volumes[0].status in ['available', 'error']
+    until: >-
+      (volume_check.volumes is defined) and (volume_check.volumes | length > 0) and ((volume_check.volumes[0].status | default('creating')) in ['available', 'in-use', 'error'])
     retries: 30
     delay: 5
-    failed_when: volume_check.volumes[0].status == 'error'
+    failed_when: >-
+      volume_check.failed | default(false) or (
+        (volume_check.volumes is defined)
+        and (volume_check.volumes | length > 0)
+        and ((volume_check.volumes[0].status | default('error')) == 'error')
+      )
 
   - name: Ensure volume is marked as bootable
     command: "openstack volume set --bootable {{ created_volume_id }}"
@@ -106,7 +110,10 @@
 
   - name: Cache latest volume details
     set_fact:
-      volume_details: "{{ volume_check.volumes[0] }}"
+      volume_details: >-
+        {{ volume_check.volumes[0]
+           if (volume_check.volumes is defined and volume_check.volumes | length > 0)
+           else (volume_result.volume if (volume_result.volume is defined) else volume_result) }}
 
   - name: Check for other volumes with the same display name
     openstack.cloud.volume_info:
