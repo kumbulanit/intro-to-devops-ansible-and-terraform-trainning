@@ -1,0 +1,15 @@
+---
+# defaults file for nginx-tested
+
+nginx_document_root: /var/www/html
+nginx_user: www-data
+nginx_group: www-data
+nginx_worker_processes: auto
+nginx_worker_connections: 1024
+nginx_keepalive_timeout: 65
+nginx_server_name: localhost
+nginx_listen_port: 80
+
+# Site content
+site_title: "Nginx Tested Role"
+site_description: "Deployed and tested with Molecule"

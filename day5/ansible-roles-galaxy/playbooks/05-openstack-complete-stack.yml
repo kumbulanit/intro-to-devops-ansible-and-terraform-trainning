@@ -1,0 +1,217 @@
+---
+#=============================================================================
+# Advanced Playbook: Complete OpenStack Deployment with Roles
+#=============================================================================
+# Description: Provision OpenStack VM and deploy full web+database stack
+#
+# Prerequisites:
+#   - OpenStack environment configured
+#   - clouds.yaml file at ~/.config/openstack/clouds.yaml
+#   - SSH keypair created in OpenStack
+#   - OpenStack collection installed: ansible-galaxy collection install openstack.cloud
+#
+# Usage:
+#   ansible-playbook 05-openstack-complete-stack.yml \
+#     -e "cloud_name=mycloud" \
+#     -e "key_name=my-keypair"
+#
+# This playbook demonstrates:
+#   - Provisioning OpenStack VMs with roles
+#   - Dynamic inventory management
+#   - Deploying complete application stack
+#   - Role composition and dependencies
+#
+#=============================================================================
+
+- name: Provision OpenStack VMs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  
+  vars:
+    cloud_name: "{{ cloud_name | default('devstack') }}"
+    key_name: "{{ key_name | default('ansible-key') }}"
+    
+  tasks:
+    - name: Display provisioning information
+      debug:
+        msg:
+          - "=========================================="
+          - "Provisioning OpenStack Infrastructure"
+          - "=========================================="
+          - "Cloud: {{ cloud_name }}"
+          - "Key Name: {{ key_name }}"
+          - "=========================================="
+
+    - name: Provision web server VM
+      include_role:
+        name: ../../roles/advanced/openstack-vm
+      vars:
+        vm_name: web-server
+        vm_flavor: m1.medium
+        vm_image: ubuntu-22.04
+        security_group_name: web-sg
+        vm_groups:
+          - openstack_webservers
+          - dynamic_inventory
+        security_rules:
+          - { protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
+          - { protocol: tcp, port_min: 80, port_max: 80, cidr: "0.0.0.0/0" }
+          - { protocol: tcp, port_min: 443, port_max: 443, cidr: "0.0.0.0/0" }
+
+    - name: Provision database server VM
+      include_role:
+        name: ../../roles/advanced/openstack-vm
+      vars:
+        vm_name: db-server
+        vm_flavor: m1.medium
+        vm_image: ubuntu-22.04
+        security_group_name: db-sg
+        vm_groups:
+          - openstack_databases
+          - dynamic_inventory
+        security_rules:
+          - { protocol: tcp, port_min: 22, port_max: 22, cidr: "0.0.0.0/0" }
+          - { protocol: tcp, port_min: 5432, port_max: 5432, cidr: "0.0.0.0/0" }
+
+    - name: Wait for VMs to be ready
+      pause:
+        seconds: 30
+
+- name: Configure Database Server
+  hosts: openstack_databases
+  become: true
+  gather_facts: true
+  
+  pre_tasks:
+    - name: Wait for system to be ready
+      wait_for_connection:
+        timeout: 300
+
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+  roles:
+    - role: ../../roles/beginner/database
+      vars:
+        db_name: production_db
+        db_user: app_user
+        db_password: "SecureDBPassword123!"
+        configure_remote_access: true
+        postgresql_listen_addresses: "*"
+        create_sample_table: true
+        insert_sample_data: true
+        configure_firewall: true
+
+- name: Configure Web Server
+  hosts: openstack_webservers
+  become: true
+  gather_facts: true
+  
+  pre_tasks:
+    - name: Wait for system to be ready
+      wait_for_connection:
+        timeout: 300
+
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+  roles:
+    - role: ../../roles/intermediate/nginx-tested
+      vars:
+        site_title: "OpenStack Deployed Application"
+        site_description: "Full stack deployed on OpenStack with Ansible Roles"
+        nginx_server_name: "{{ ansible_hostname }}"
+
+  post_tasks:
+    - name: Create database connection test script
+      copy:
+        content: |
+          #!/bin/bash
+          PGPASSWORD="{{ hostvars[groups['openstack_databases'][0]]['db_password'] }}" \
+          psql -h {{ hostvars[groups['openstack_databases'][0]]['ansible_default_ipv4']['address'] }} \
+          -U {{ hostvars[groups['openstack_databases'][0]]['db_user'] }} \
+          -d {{ hostvars[groups['openstack_databases'][0]]['db_name'] }} \
+          -c "SELECT 1;"
+        dest: /usr/local/bin/test-db-connection.sh
+        mode: '0755'
+
+    - name: Test database connectivity
+      command: /usr/local/bin/test-db-connection.sh
+      register: db_connectivity
+      ignore_errors: true
+      changed_when: false
+
+- name: Deployment Summary
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  
+  tasks:
+    - name: Display deployment summary
+      debug:
+        msg:
+          - "=========================================="
+          - "OpenStack Deployment Complete!"
+          - "=========================================="
+          - ""
+          - "Web Server:"
+          - "  Name: web-server"
+          - "  IP: {{ hostvars['web-server']['ansible_host'] }}"
+          - "  URL: http://{{ hostvars['web-server']['ansible_host'] }}"
+          - ""
+          - "Database Server:"
+          - "  Name: db-server"
+          - "  IP: {{ hostvars['db-server']['ansible_host'] }}"
+          - "  Port: 5432"
+          - "  Database: production_db"
+          - ""
+          - "Roles Deployed:"
+          - "  ✓ openstack-vm (infrastructure)"
+          - "  ✓ database (PostgreSQL)"
+          - "  ✓ nginx-tested (web server)"
+          - ""
+          - "Next Steps:"
+          - "  1. Access web: http://{{ hostvars['web-server']['ansible_host'] }}"
+          - "  2. SSH to web: ssh ubuntu@{{ hostvars['web-server']['ansible_host'] }}"
+          - "  3. SSH to db: ssh ubuntu@{{ hostvars['db-server']['ansible_host'] }}"
+          - "  4. Test connectivity: /usr/local/bin/test-db-connection.sh"
+          - "=========================================="
+
+    - name: Save deployment information
+      copy:
+        content: |
+          OpenStack Deployment Summary
+          ========================================
+          Deployed: {{ ansible_date_time.iso8601 }}
+          
+          Web Server:
+            Name: web-server
+            IP: {{ hostvars['web-server']['ansible_host'] }}
+            URL: http://{{ hostvars['web-server']['ansible_host'] }}
+            SSH: ssh ubuntu@{{ hostvars['web-server']['ansible_host'] }}
+          
+          Database Server:
+            Name: db-server
+            IP: {{ hostvars['db-server']['ansible_host'] }}
+            Port: 5432
+            Database: production_db
+            User: app_user
+            SSH: ssh ubuntu@{{ hostvars['db-server']['ansible_host'] }}
+          
+          Roles Used:
+            - openstack-vm (infrastructure provisioning)
+            - database (PostgreSQL with sample data)
+            - nginx-tested (Molecule-tested web server)
+          
+          Management:
+            - View VM info: cat web-server-info.txt
+            - View VM info: cat db-server-info.txt
+            - Test DB from web: ssh ubuntu@{{ hostvars['web-server']['ansible_host'] }} 
+              sudo /usr/local/bin/test-db-connection.sh
+        dest: ./openstack-deployment-summary.txt
+      become: false

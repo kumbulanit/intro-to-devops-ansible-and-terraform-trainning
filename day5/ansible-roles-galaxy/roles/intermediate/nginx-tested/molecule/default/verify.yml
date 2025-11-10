@@ -1,0 +1,148 @@
+---
+#=============================================================================
+# Molecule Verify Playbook
+#=============================================================================
+# This playbook contains tests to verify the role worked correctly
+#=============================================================================
+
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+  - name: Check if Nginx is installed
+    package:
+      name: nginx
+      state: present
+    check_mode: true
+    register: nginx_installed
+
+  - name: Verify Nginx is installed
+    assert:
+      that:
+      - not nginx_installed.changed
+      fail_msg: "Nginx is not installed"
+      success_msg: "Nginx is installed"
+
+  - name: Check if Nginx service is running
+    service:
+      name: nginx
+      state: started
+    check_mode: true
+    register: nginx_service
+
+  - name: Verify Nginx service is running
+    assert:
+      that:
+      - nginx_service.status.ActiveState == "active"
+      fail_msg: "Nginx service is not running"
+      success_msg: "Nginx service is running"
+
+  - name: Check if Nginx is enabled
+    service:
+      name: nginx
+      enabled: true
+    check_mode: true
+    register: nginx_enabled
+
+  - name: Verify Nginx is enabled
+    assert:
+      that:
+      - not nginx_enabled.changed
+      fail_msg: "Nginx is not enabled"
+      success_msg: "Nginx is enabled at boot"
+
+  - name: Check if document root exists
+    stat:
+      path: /var/www/html
+    register: doc_root
+
+  - name: Verify document root exists
+    assert:
+      that:
+      - doc_root.stat.exists
+      - doc_root.stat.isdir
+      fail_msg: "Document root does not exist"
+      success_msg: "Document root exists"
+
+  - name: Check if index.html exists
+    stat:
+      path: /var/www/html/index.html
+    register: index_file
+
+  - name: Verify index.html exists
+    assert:
+      that:
+      - index_file.stat.exists
+      fail_msg: "index.html does not exist"
+      success_msg: "index.html exists"
+
+  - name: Check if health endpoint exists
+    stat:
+      path: /var/www/html/health
+    register: health_file
+
+  - name: Verify health endpoint exists
+    assert:
+      that:
+      - health_file.stat.exists
+      fail_msg: "Health endpoint does not exist"
+      success_msg: "Health endpoint exists"
+
+  - name: Test Nginx is responding on port 80
+    uri:
+      url: http://localhost
+      return_content: true
+    register: nginx_response
+    retries: 3
+    delay: 2
+
+  - name: Verify Nginx responds successfully
+    assert:
+      that:
+      - nginx_response.status == 200
+      fail_msg: "Nginx is not responding on port 80"
+      success_msg: "Nginx is responding on port 80"
+
+  - name: Test health endpoint
+    uri:
+      url: http://localhost/health
+      return_content: true
+    register: health_response
+
+  - name: Verify health endpoint works
+    assert:
+      that:
+      - health_response.status == 200
+      - "'OK' in health_response.content"
+      fail_msg: "Health endpoint is not working"
+      success_msg: "Health endpoint is working"
+
+  - name: Check Nginx configuration syntax
+    command: nginx -t
+    register: nginx_config_test
+    changed_when: false
+
+  - name: Verify Nginx configuration is valid
+    assert:
+      that:
+      - nginx_config_test.rc == 0
+      fail_msg: "Nginx configuration is invalid"
+      success_msg: "Nginx configuration is valid"
+
+  - name: Display test summary
+    debug:
+      msg:
+      - "=========================================="
+      - "All Molecule Tests Passed!"
+      - "=========================================="
+      - "✓ Nginx installed"
+      - "✓ Nginx service running"
+      - "✓ Nginx enabled at boot"
+      - "✓ Document root created"
+      - "✓ Index page deployed"
+      - "✓ Health endpoint working"
+      - "✓ HTTP responding on port 80"
+      - "✓ Configuration valid"
+      - "=========================================="

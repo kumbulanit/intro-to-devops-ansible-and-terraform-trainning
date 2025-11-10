@@ -1,0 +1,298 @@
+---
+# Complete High Availability Infrastructure with OpenStack
+# This playbook demonstrates:
+# - OpenStack VM provisioning
+# - Web server configuration
+# - Database server setup
+# - Load balancer deployment
+# - Full stack integration
+
+- name: Provision OpenStack Infrastructure
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    os_cloud_name: mycloud
+    os_image: Ubuntu-22.04
+    os_flavor: m1.medium
+    os_network: private-network
+    os_key_name: my-keypair
+    
+    # Define infrastructure
+    infrastructure:
+      loadbalancer:
+        name: lb-01
+        group: loadbalancers
+      webservers:
+        - name: web-01
+          group: webservers
+        - name: web-02
+          group: webservers
+      databases:
+        - name: db-01
+          group: databases
+  
+  tasks:
+    - name: Display infrastructure plan
+      debug:
+        msg:
+          - "Provisioning High Availability Infrastructure"
+          - "Load Balancer: {{ infrastructure.loadbalancer.name }}"
+          - "Web Servers: {{ infrastructure.webservers | map(attribute='name') | list }}"
+          - "Database: {{ infrastructure.databases | map(attribute='name') | list }}"
+    
+    - name: Provision Load Balancer VM
+      include_role:
+        name: advanced/openstack-vm
+      vars:
+        os_vm_name: "{{ infrastructure.loadbalancer.name }}"
+        os_inventory_group: "{{ infrastructure.loadbalancer.group }}"
+        os_security_rules:
+          - protocol: tcp
+            port_range_min: 22
+            port_range_max: 22
+            remote_ip_prefix: "0.0.0.0/0"
+            description: "SSH"
+          - protocol: tcp
+            port_range_min: 80
+            port_range_max: 80
+            remote_ip_prefix: "0.0.0.0/0"
+            description: "HTTP"
+          - protocol: tcp
+            port_range_min: 8080
+            port_range_max: 8080
+            remote_ip_prefix: "0.0.0.0/0"
+            description: "HAProxy Stats"
+    
+    - name: Provision Web Server VMs
+      include_role:
+        name: advanced/openstack-vm
+      vars:
+        os_vm_name: "{{ item.name }}"
+        os_inventory_group: "{{ item.group }}"
+        os_security_rules:
+          - protocol: tcp
+            port_range_min: 22
+            port_range_max: 22
+            remote_ip_prefix: "0.0.0.0/0"
+            description: "SSH"
+          - protocol: tcp
+            port_range_min: 80
+            port_range_max: 80
+            remote_ip_prefix: "0.0.0.0/0"
+            description: "HTTP"
+      loop: "{{ infrastructure.webservers }}"
+    
+    - name: Provision Database VM
+      include_role:
+        name: advanced/openstack-vm
+      vars:
+        os_vm_name: "{{ item.name }}"
+        os_inventory_group: "{{ item.group }}"
+        os_security_rules:
+          - protocol: tcp
+            port_range_min: 22
+            port_range_max: 22
+            remote_ip_prefix: "10.0.0.0/8"
+            description: "SSH internal"
+          - protocol: tcp
+            port_range_min: 5432
+            port_range_max: 5432
+            remote_ip_prefix: "10.0.0.0/8"
+            description: "PostgreSQL internal"
+      loop: "{{ infrastructure.databases }}"
+    
+    - name: Wait for all VMs to be ready
+      pause:
+        seconds: 30
+        prompt: "Waiting for VMs to complete initialization..."
+
+# Configure Database Servers
+- name: Configure Database Servers
+  hosts: databases
+  become: true
+  
+  vars:
+    db_name: production_db
+    db_user: webapp
+    db_password: "{{ vault_db_password | default('changeme') }}"
+    db_host: "0.0.0.0"
+  
+  pre_tasks:
+    - name: Update system packages
+      apt:
+        update_cache: true
+        upgrade: safe
+      when: ansible_os_family == "Debian"
+  
+  roles:
+    - role: beginner/database
+
+# Configure Web Servers
+- name: Configure Web Servers
+  hosts: webservers
+  become: true
+  
+  vars:
+    server_name: "{{ ansible_hostname }}.example.com"
+    document_root: /var/www/html
+    enable_ssl: false
+  
+  pre_tasks:
+    - name: Update system packages
+      apt:
+        update_cache: true
+        upgrade: safe
+      when: ansible_os_family == "Debian"
+    
+    - name: Get database IP from inventory
+      set_fact:
+        database_ip: "{{ hostvars[groups['databases'][0]]['ansible_default_ipv4']['address'] }}"
+      when: groups['databases'] | length > 0
+  
+  roles:
+    - role: beginner/webserver
+  
+  post_tasks:
+    - name: Create application config with database connection
+      copy:
+        content: |
+          <?php
+          // Application Configuration
+          $db_host = "{{ database_ip | default('localhost') }}";
+          $db_name = "production_db";
+          $db_user = "webapp";
+          $db_password = "changeme";  // Use vault in production!
+          
+          // Database connection
+          $conn = pg_connect("host=$db_host dbname=$db_name user=$db_user password=$db_password");
+          
+          if ($conn) {
+              echo "Connected to database successfully!<br>";
+              echo "Server: {{ ansible_hostname }}<br>";
+          } else {
+              echo "Database connection failed!<br>";
+          }
+          ?>
+        dest: /var/www/html/dbtest.php
+        owner: www-data
+        group: www-data
+        mode: '0644'
+      when: database_ip is defined
+
+# Configure Load Balancer
+- name: Configure Load Balancer
+  hosts: loadbalancers
+  become: true
+  
+  pre_tasks:
+    - name: Update system packages
+      apt:
+        update_cache: true
+        upgrade: safe
+      when: ansible_os_family == "Debian"
+    
+    - name: Build backend server list
+      set_fact:
+        backend_servers: "{{ backend_servers | default([]) + [{'name': item, 'address': hostvars[item]['ansible_default_ipv4']['address'], 'port': 80, 'check': true}] }}"
+      loop: "{{ groups['webservers'] }}"
+  
+  roles:
+    - role: advanced/haproxy-lb
+      vars:
+        haproxy_backend_servers: "{{ backend_servers }}"
+        haproxy_balance_algorithm: roundrobin
+        haproxy_stats_enabled: true
+        haproxy_stats_username: admin
+        haproxy_stats_password: "{{ vault_haproxy_password | default('changeme') }}"
+
+# Verification and Testing
+- name: Verify Complete Stack
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    lb_ip: "{{ hostvars[groups['loadbalancers'][0]]['ansible_default_ipv4']['address'] }}"
+  
+  tasks:
+    - name: Test load balancer endpoint
+      uri:
+        url: "http://{{ lb_ip }}:80"
+        return_content: true
+        status_code: 200
+      register: lb_test
+      retries: 3
+      delay: 10
+    
+    - name: Test load balancer stats page
+      uri:
+        url: "http://{{ lb_ip }}:8080/stats"
+        user: admin
+        password: changeme
+        force_basic_auth: true
+        status_code: 200
+      register: stats_test
+    
+    - name: Display deployment summary
+      debug:
+        msg:
+          - "========================================"
+          - "High Availability Stack Deployment Complete!"
+          - "========================================"
+          - ""
+          - "Infrastructure:"
+          - "  Load Balancer: {{ lb_ip }}"
+          - "  Web Servers: {{ groups['webservers'] | length }}"
+          - "  Database Servers: {{ groups['databases'] | length }}"
+          - ""
+          - "Access Points:"
+          - "  Application: http://{{ lb_ip }}"
+          - "  DB Test Page: http://{{ lb_ip }}/dbtest.php"
+          - "  Stats Dashboard: http://{{ lb_ip }}:8080/stats"
+          - "    Username: admin"
+          - "    Password: changeme"
+          - ""
+          - "Status:"
+          - "  Load Balancer: {{ 'HEALTHY' if lb_test is succeeded else 'UNHEALTHY' }}"
+          - "  Stats Page: {{ 'ACCESSIBLE' if stats_test is succeeded else 'INACCESSIBLE' }}"
+    
+    - name: Save complete infrastructure summary
+      copy:
+        content: |
+          High Availability Infrastructure Deployment
+          ============================================
+          Deployment Date: {{ ansible_date_time.iso8601 }}
+          
+          Load Balancer:
+          - IP: {{ lb_ip }}
+          - Port: 80
+          - Stats: {{ lb_ip }}:8080/stats
+          
+          Web Servers:
+          {% for host in groups['webservers'] %}
+          - {{ host }}: {{ hostvars[host]['ansible_default_ipv4']['address'] }}
+          {% endfor %}
+          
+          Database Servers:
+          {% for host in groups['databases'] %}
+          - {{ host }}: {{ hostvars[host]['ansible_default_ipv4']['address'] }}
+          {% endfor %}
+          
+          Access Information:
+          - Application URL: http://{{ lb_ip }}
+          - Database Test: http://{{ lb_ip }}/dbtest.php
+          - Monitoring: http://{{ lb_ip }}:8080/stats
+          
+          Credentials:
+          - HAProxy Stats: admin / changeme
+          - Database: webapp / changeme
+          
+          Health Check:
+          - Load Balancer: {{ 'HEALTHY' if lb_test is succeeded else 'UNHEALTHY' }}
+          - Response Time: {{ lb_test.elapsed | default(0) }}s
+          
+          Configuration Files:
+          - Load Balancer Config: /etc/haproxy/haproxy.cfg
+          - Web Server Config: /etc/nginx/sites-available/default (or Apache)
+          - Database Config: /etc/postgresql/*/main/postgresql.conf
+        dest: /tmp/ha_infrastructure_summary.txt

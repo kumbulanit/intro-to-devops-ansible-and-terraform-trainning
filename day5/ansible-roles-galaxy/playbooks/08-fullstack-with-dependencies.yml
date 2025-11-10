@@ -1,0 +1,143 @@
+---
+# Full Stack Application with Dependencies Example
+# This playbook demonstrates role dependencies
+
+- name: Deploy Full Stack Application
+  hosts: appservers
+  become: true
+  
+  vars:
+    app_name: demo_app
+    app_environment: production
+    app_db_host: "{{ hostvars[groups['databases'][0]]['ansible_default_ipv4']['address'] if groups['databases'] | length > 0 else 'localhost' }}"
+    app_db_name: demo_production
+    app_db_user: demo_user
+    app_db_password: "{{ vault_app_password | default('changeme') }}"
+    
+    # Web server configuration
+    webserver_type: nginx
+    server_name: "{{ ansible_fqdn }}"
+    enable_ssl: false
+  
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Deploying Full Stack Application with Dependencies"
+          - "Application: {{ app_name }}"
+          - "Environment: {{ app_environment }}"
+          - "Database Host: {{ app_db_host }}"
+          - "Web Server: {{ webserver_type }}"
+    
+    - name: Update system packages
+      apt:
+        update_cache: true
+        upgrade: safe
+      when: ansible_os_family == "Debian"
+    
+    - name: Install PHP and PostgreSQL client
+      apt:
+        name:
+          - php-fpm
+          - php-pgsql
+          - php-cli
+          - postgresql-client
+        state: present
+      when: ansible_os_family == "Debian"
+  
+  roles:
+    # This role has dependencies on database and webserver roles
+    # See roles/advanced/fullstack-app/meta/main.yml
+    - role: advanced/fullstack-app
+  
+  post_tasks:
+    - name: Wait for application to be ready
+      wait_for:
+        host: localhost
+        port: 80
+        timeout: 30
+    
+    - name: Test application endpoint
+      uri:
+        url: "http://localhost/"
+        return_content: true
+        status_code: 200
+      register: app_test
+      ignore_errors: true
+    
+    - name: Display application status
+      debug:
+        msg:
+          - "Application Status: {{ 'HEALTHY' if app_test is succeeded else 'UNHEALTHY' }}"
+          - "Application URL: http://{{ ansible_default_ipv4.address }}"
+          - "Database: {{ app_db_name }} on {{ app_db_host }}"
+          - ""
+          - "Role Dependencies Executed:"
+          - "  1. beginner/database - PostgreSQL setup"
+          - "  2. beginner/webserver - Nginx/Apache setup"
+          - "  3. advanced/fullstack-app - Application deployment"
+    
+    - name: Create deployment documentation
+      copy:
+        content: |
+          Full Stack Application Deployment
+          ==================================
+          Deployment Date: {{ ansible_date_time.iso8601 }}
+          
+          Application Details:
+          - Name: {{ app_name }}
+          - Environment: {{ app_environment }}
+          - Host: {{ ansible_hostname }}
+          - IP Address: {{ ansible_default_ipv4.address }}
+          
+          Components Deployed (via Role Dependencies):
+          1. PostgreSQL Database
+             - Database Name: {{ app_db_name }}
+             - Database Host: {{ app_db_host }}
+             - Database User: {{ app_db_user }}
+          
+          2. Web Server ({{ webserver_type }})
+             - Server Name: {{ server_name }}
+             - Document Root: /opt/{{ app_name }}/public
+             - SSL Enabled: {{ enable_ssl }}
+          
+          3. Application
+             - Application Root: /opt/{{ app_name }}
+             - Configuration: /opt/{{ app_name }}/config
+             - Logs: /opt/{{ app_name }}/logs
+          
+          Access:
+          - Application: http://{{ ansible_default_ipv4.address }}
+          - Health Status: {{ 'HEALTHY' if app_test is succeeded else 'UNHEALTHY' }}
+          
+          Role Dependency Chain:
+          advanced/fullstack-app
+            ├── beginner/database
+            └── beginner/webserver
+          
+          Note: Dependencies are automatically resolved and executed
+          in the correct order as defined in meta/main.yml
+        dest: /tmp/fullstack_deployment.txt
+      delegate_to: localhost
+
+# Optional: Separate database server configuration
+- name: Configure Separate Database Server
+  hosts: databases
+  become: true
+  
+  vars:
+    db_name: demo_production
+    db_user: demo_user
+    db_password: "{{ vault_app_password | default('changeme') }}"
+    db_host: "0.0.0.0"
+  
+  tasks:
+    - name: Check if this is a separate database server
+      debug:
+        msg: "Configuring dedicated database server"
+      when: inventory_hostname not in groups.get('appservers', [])
+    
+    - name: Deploy database
+      include_role:
+        name: beginner/database
+      when: inventory_hostname not in groups.get('appservers', [])

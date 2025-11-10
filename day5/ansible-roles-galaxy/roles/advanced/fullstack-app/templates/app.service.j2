@@ -1,0 +1,28 @@
+[Unit]
+Description={{ app_service_description }}
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User={{ app_service_user }}
+Group={{ app_group }}
+WorkingDirectory={{ app_root }}
+ExecStart=/usr/bin/python3 {{ app_root }}/app.py
+Restart=always
+RestartSec=10
+
+# Environment variables
+Environment="APP_ENV={{ app_environment }}"
+Environment="APP_CONFIG={{ app_root }}/config/app.ini"
+
+# Logging
+StandardOutput=append:{{ app_log_path }}/{{ app_name }}.log
+StandardError=append:{{ app_log_path }}/{{ app_name }}-error.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

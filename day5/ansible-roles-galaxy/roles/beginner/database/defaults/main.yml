@@ -1,0 +1,32 @@
+---
+# defaults file for database
+
+# Database configuration
+db_name: myapp_db
+db_user: myapp_user
+db_password: "changeme123"  # Change this!
+
+# PostgreSQL version (will use system default if not specified)
+postgresql_version: "14"
+
+# PostgreSQL service name
+postgresql_service: postgresql
+
+# Configuration
+postgresql_listen_addresses: "localhost"
+postgresql_port: 5432
+postgresql_max_connections: 100
+
+# Sample data
+sample_table_name: users
+create_sample_table: true
+insert_sample_data: true
+
+# Features
+configure_firewall: false
+configure_remote_access: false
+
+# Backup configuration
+enable_backups: false
+backup_dir: /var/backups/postgresql
+backup_retention_days: 7

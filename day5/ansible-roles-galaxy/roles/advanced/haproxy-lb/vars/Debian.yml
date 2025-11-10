@@ -1,0 +1,3 @@
+---
+# Debian/Ubuntu specific variables
+python_ssl_package: python3-openssl

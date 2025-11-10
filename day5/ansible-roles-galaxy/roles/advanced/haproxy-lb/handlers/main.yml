@@ -1,0 +1,17 @@
+---
+# HAProxy service restart handler
+- name: restart haproxy
+  service:
+    name: "{{ haproxy_service_name }}"
+    state: restarted
+
+# HAProxy graceful reload (preserves existing connections)
+- name: reload haproxy
+  service:
+    name: "{{ haproxy_service_name }}"
+    state: reloaded
+
+# Verify HAProxy configuration
+- name: verify haproxy config
+  command: haproxy -c -f {{ haproxy_config_file }}
+  changed_when: false

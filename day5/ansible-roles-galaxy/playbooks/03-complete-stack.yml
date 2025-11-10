@@ -1,0 +1,66 @@
+---
+#=============================================================================
+# Beginner Playbook 3: Deploy Complete Stack (Web + Database)
+#=============================================================================
+# Description: Deploy both webserver and database roles together
+#
+# Usage:
+#   ansible-playbook 03-complete-stack.yml -i inventory.ini
+#
+# This playbook demonstrates:
+#   - Using multiple roles in one playbook
+#   - Role execution order
+#   - Variable sharing between roles
+#
+#=============================================================================
+
+- name: Deploy Database Server
+  hosts: databases
+  become: true
+  
+  roles:
+    - role: ../../roles/beginner/database
+      vars:
+        db_name: myapp_production
+        db_user: myapp_user
+        db_password: "ProductionPassword123!"
+        configure_remote_access: true
+        postgresql_listen_addresses: "*"
+        create_sample_table: true
+        insert_sample_data: true
+        configure_firewall: true
+
+- name: Deploy Web Server
+  hosts: webservers
+  become: true
+  
+  roles:
+    - role: ../../roles/beginner/webserver
+      vars:
+        site_name: "Full Stack Application"
+        site_tagline: "Web + Database Powered by Ansible"
+        site_background_color: "#27ae60"
+        configure_firewall: true
+
+  post_tasks:
+    - name: Test database connectivity from web server
+      shell: |
+        PGPASSWORD="{{ hostvars[groups['databases'][0]]['db_password'] }}" \
+        psql -h {{ hostvars[groups['databases'][0]]['ansible_default_ipv4']['address'] }} \
+        -U {{ hostvars[groups['databases'][0]]['db_user'] }} \
+        -d {{ hostvars[groups['databases'][0]]['db_name'] }} \
+        -c "SELECT 1;"
+      register: db_test
+      ignore_errors: true
+
+    - name: Display deployment summary
+      debug:
+        msg:
+          - "=========================================="
+          - "Complete Stack Deployed!"
+          - "=========================================="
+          - "Web Server: http://{{ ansible_default_ipv4.address }}"
+          - "Database: {{ hostvars[groups['databases'][0]]['ansible_default_ipv4']['address'] }}:5432"
+          - "Database Name: {{ hostvars[groups['databases'][0]]['db_name'] }}"
+          - "DB Connectivity: {{ 'OK' if db_test.rc == 0 else 'FAILED' }}"
+          - "=========================================="

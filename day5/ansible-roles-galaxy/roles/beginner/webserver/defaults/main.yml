@@ -1,0 +1,44 @@
+---
+# defaults file for webserver
+# These variables can be overridden in playbooks or inventory
+
+# Web server type (apache or nginx)
+webserver_type: apache
+
+# Service names
+webserver_service: apache2
+webserver_user: www-data
+webserver_group: www-data
+
+# Paths
+document_root: /var/www/html
+webserver_config_path: /etc/apache2/sites-available/000-default.conf
+webserver_config_template: apache-vhost.conf.j2
+
+# Packages (will be overridden by vars based on OS)
+webserver_packages:
+  - apache2
+
+# Website configuration
+site_name: "My Ansible Managed Site"
+site_tagline: "Deployed with Ansible Roles"
+site_background_color: "#4a90e2"
+
+# Features
+configure_firewall: true
+webserver_custom_config: false
+enable_ssl: false
+
+# Port configuration
+webserver_http_port: 80
+webserver_https_port: 443
+
+# Performance tuning
+max_clients: 150
+keep_alive: true
+keep_alive_timeout: 5
+
+# Logging
+access_log: /var/log/apache2/access.log
+error_log: /var/log/apache2/error.log
+log_level: warn

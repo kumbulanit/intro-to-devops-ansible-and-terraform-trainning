@@ -1,0 +1,24 @@
+[application]
+name = {{ app_name }}
+environment = {{ app_environment }}
+debug = {{ 'true' if app_environment == 'development' else 'false' }}
+log_level = {{ app_log_level }}
+log_path = {{ app_log_path }}
+
+[paths]
+root = {{ app_root }}
+config = {{ app_root }}/config
+data = {{ app_root }}/data
+uploads = {{ app_root }}/uploads
+logs = {{ app_root }}/logs
+
+[server]
+host = {{ ansible_default_ipv4.address }}
+port = 8000
+workers = 4
+
+[database]
+# Database connection details (see database.conf for full configuration)
+host = {{ app_db_host }}
+port = 5432
+name = {{ app_db_name }}

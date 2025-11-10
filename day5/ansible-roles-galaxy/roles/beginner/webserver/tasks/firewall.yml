@@ -1,0 +1,35 @@
+---
+# Firewall configuration tasks
+- name: Allow HTTP traffic
+  ufw:
+    rule: allow
+    port: '80'
+    proto: tcp
+  become: yes
+  when: ansible_os_family == "Debian"
+
+- name: Allow HTTPS traffic
+  ufw:
+    rule: allow
+    port: '443'
+    proto: tcp
+  become: yes
+  when: ansible_os_family == "Debian"
+
+- name: Configure firewalld for HTTP (RHEL/CentOS)
+  firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+    immediate: yes
+  become: yes
+  when: ansible_os_family == "RedHat"
+
+- name: Configure firewalld for HTTPS (RHEL/CentOS)
+  firewalld:
+    service: https
+    permanent: yes
+    state: enabled
+    immediate: yes
+  become: yes
+  when: ansible_os_family == "RedHat"

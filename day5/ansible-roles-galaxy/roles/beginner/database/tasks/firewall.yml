@@ -1,0 +1,19 @@
+---
+# Firewall tasks for database role
+
+- name: Allow PostgreSQL through UFW (Debian)
+  ufw:
+    rule: allow
+    port: "{{ postgresql_port }}"
+    proto: tcp
+  become: true
+  when: ansible_os_family == "Debian"
+
+- name: Allow PostgreSQL through firewalld (RedHat)
+  firewalld:
+    port: "{{ postgresql_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  become: true
+  when: ansible_os_family == "RedHat"

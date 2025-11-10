@@ -1,0 +1,39 @@
+---
+galaxy_info:
+  role_name: haproxy_lb
+  author: Ansible Training Team
+  description: Enterprise-grade HAProxy load balancer configuration with SSL/TLS support, health checks, and statistics dashboard
+  company: DevOps Training
+  license: MIT
+  
+  min_ansible_version: "2.10"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+    - name: Fedora
+      versions:
+        - "37"
+        - "38"
+  
+  galaxy_tags:
+    - load balancer
+    - haproxy
+    - networking
+    - high-availability
+    - reverse-proxy
+    - ssl
+    - tls
+    - monitoring
+
+dependencies: []

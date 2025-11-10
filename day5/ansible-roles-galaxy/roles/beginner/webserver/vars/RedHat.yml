@@ -1,0 +1,13 @@
+---
+# vars file for RedHat-based systems (CentOS, RHEL, Fedora)
+
+webserver_packages:
+- httpd
+- mod_ssl
+
+webserver_service: httpd
+webserver_user: apache
+webserver_group: apache
+webserver_config_path: /etc/httpd/conf.d/vhost.conf
+webserver_config_dir: /etc/httpd/conf.d
+document_root: /var/www/html

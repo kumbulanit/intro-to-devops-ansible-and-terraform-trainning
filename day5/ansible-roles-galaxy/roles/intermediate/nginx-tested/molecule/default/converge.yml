@@ -1,0 +1,23 @@
+---
+#=============================================================================
+# Molecule Converge Playbook
+#=============================================================================
+# This playbook is run during the converge phase to apply the role
+#=============================================================================
+
+- name: Converge
+  hosts: all
+  become: true
+
+  pre_tasks:
+  - name: Update apt cache (Debian)
+    apt:
+      update_cache: true
+      cache_valid_time: 3600
+    when: ansible_os_family == "Debian"
+
+  roles:
+  - role: nginx-tested
+    vars:
+      site_title: "Molecule Test Instance"
+      site_description: "Testing nginx-tested role with Molecule"

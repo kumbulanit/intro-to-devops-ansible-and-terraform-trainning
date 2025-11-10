@@ -1,0 +1,28 @@
+---
+# handlers file for webserver
+
+- name: restart webserver
+  service:
+    name: "{{ webserver_service }}"
+    state: restarted
+  become: true
+
+- name: reload webserver
+  service:
+    name: "{{ webserver_service }}"
+    state: reloaded
+  become: true
+
+- name: check webserver status
+  service:
+    name: "{{ webserver_service }}"
+    state: started
+  become: true
+  register: webserver_status
+
+- name: restart firewall
+  service:
+    name: ufw
+    state: restarted
+  become: true
+  when: ansible_os_family == "Debian"

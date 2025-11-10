@@ -1,0 +1,122 @@
+---
+# Advanced HAProxy Load Balancer Role - Main Tasks
+# This role deploys and configures HAProxy as a load balancer
+
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
+  tags: [always]
+
+- name: Update apt cache (Debian/Ubuntu)
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+  tags: [packages]
+
+- name: Install HAProxy
+  package:
+    name: "{{ haproxy_package_name }}"
+    state: present
+  tags: [packages]
+
+- name: Install Python SSL library (for certificate handling)
+  package:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ python_ssl_package }}"
+  when: haproxy_ssl_enabled | bool
+  tags: [packages, ssl]
+
+- name: Create HAProxy directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - "{{ haproxy_config_dir }}"
+    - "{{ haproxy_ssl_dir }}"
+    - /var/lib/haproxy
+  tags: [config]
+
+- name: Create HAProxy socket directory
+  file:
+    path: "{{ haproxy_socket_dir }}"
+    state: directory
+    owner: "{{ haproxy_user }}"
+    group: "{{ haproxy_group }}"
+    mode: '0755'
+  tags: [config]
+
+- name: Generate HAProxy configuration
+  template:
+    src: haproxy.cfg.j2
+    dest: "{{ haproxy_config_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+    validate: haproxy -c -f %s
+  notify: reload haproxy
+  tags: [config]
+
+- name: Generate HAProxy stats authentication file
+  template:
+    src: haproxy.stats.j2
+    dest: "{{ haproxy_config_dir }}/stats.auth"
+    owner: root
+    group: root
+    mode: '0600'
+  when: haproxy_stats_enabled | bool
+  notify: reload haproxy
+  tags: [config, stats]
+
+- name: Copy SSL certificate
+  copy:
+    src: "{{ haproxy_ssl_certificate_local_path }}"
+    dest: "{{ haproxy_ssl_dir }}/{{ haproxy_ssl_certificate_name }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - haproxy_ssl_enabled | bool
+    - haproxy_ssl_certificate_local_path is defined
+  notify: reload haproxy
+  tags: [ssl]
+
+- name: Configure firewall (include firewall tasks)
+  include_tasks: firewall.yml
+  when: haproxy_configure_firewall | bool
+  tags: [firewall]
+
+- name: Enable and start HAProxy service
+  service:
+    name: "{{ haproxy_service_name }}"
+    state: started
+    enabled: true
+  tags: [service]
+
+- name: Check HAProxy status
+  service:
+    name: "{{ haproxy_service_name }}"
+  register: haproxy_status
+  tags: [verify]
+
+- name: Wait for HAProxy to be ready
+  wait_for:
+    host: "{{ haproxy_bind_address }}"
+    port: "{{ haproxy_frontend_port }}"
+    timeout: 30
+  when: haproxy_status.status.ActiveState == "active"
+  tags: [verify]
+
+- name: Display HAProxy information
+  debug:
+    msg:
+      - "HAProxy Load Balancer is configured and running"
+      - "Frontend: {{ haproxy_bind_address }}:{{ haproxy_frontend_port }}"
+      - "Backend servers: {{ haproxy_backend_servers | length }}"
+      - "Stats page: http://{{ haproxy_bind_address }}:{{ haproxy_stats_port }}/stats (if enabled)"
+      - "Load balancing algorithm: {{ haproxy_balance_algorithm }}"
+  tags: [verify]

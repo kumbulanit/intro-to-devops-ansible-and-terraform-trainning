@@ -1,0 +1,88 @@
+---
+# tasks file for openstack-vm role
+# Provisions and configures OpenStack VMs
+
+- name: Create security group
+  openstack.cloud.security_group:
+    cloud: "{{ cloud_name }}"
+    name: "{{ security_group_name }}"
+    description: "Security group for {{ vm_name }}"
+    state: present
+  register: sec_group
+  tags:
+    - openstack
+    - security
+
+- name: Add security group rules
+  openstack.cloud.security_group_rule:
+    cloud: "{{ cloud_name }}"
+    security_group: "{{ security_group_name }}"
+    protocol: "{{ item.protocol }}"
+    port_range_min: "{{ item.port_min }}"
+    port_range_max: "{{ item.port_max }}"
+    remote_ip_prefix: "{{ item.cidr }}"
+    state: present
+  loop: "{{ security_rules }}"
+  tags:
+    - openstack
+    - security
+
+- name: Create VM instance
+  openstack.cloud.server:
+    cloud: "{{ cloud_name }}"
+    name: "{{ vm_name }}"
+    image: "{{ vm_image }}"
+    flavor: "{{ vm_flavor }}"
+    key_name: "{{ key_name }}"
+    network: "{{ network_name }}"
+    security_groups:
+      - "{{ security_group_name }}"
+    auto_ip: "{{ assign_floating_ip }}"
+    wait: true
+    timeout: 300
+    state: present
+  register: vm_instance
+  tags:
+    - openstack
+    - vm
+
+- name: Wait for VM to be accessible via SSH
+  wait_for:
+    host: "{{ vm_instance.server.public_v4 }}"
+    port: 22
+    delay: 10
+    timeout: 300
+  when: vm_instance.server.public_v4 is defined
+  tags:
+    - openstack
+    - vm
+
+- name: Add VM to inventory
+  add_host:
+    name: "{{ vm_name }}"
+    ansible_host: "{{ vm_instance.server.public_v4 }}"
+    ansible_user: "{{ vm_user }}"
+    ansible_ssh_private_key_file: "{{ ssh_key_file }}"
+    groups: "{{ vm_groups }}"
+  when: vm_instance.server.public_v4 is defined
+  tags:
+    - openstack
+    - inventory
+
+- name: Save VM information
+  copy:
+    content: |
+      VM Name: {{ vm_name }}
+      VM ID: {{ vm_instance.server.id }}
+      IP Address: {{ vm_instance.server.public_v4 | default('N/A') }}
+      Private IP: {{ vm_instance.server.private_v4 | default('N/A') }}
+      Flavor: {{ vm_flavor }}
+      Image: {{ vm_image }}
+      Security Group: {{ security_group_name }}
+      Created: {{ ansible_date_time.iso8601 }}
+    dest: "./{{ vm_name }}-info.txt"
+  delegate_to: localhost
+  become: false
+  tags:
+    - openstack
+    - info

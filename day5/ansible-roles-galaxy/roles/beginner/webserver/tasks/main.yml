@@ -1,0 +1,74 @@
+---
+# tasks file for webserver
+# This is the main entry point for the webserver role
+
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
+  tags:
+    - webserver
+    - install
+
+- name: Install web server packages
+  package:
+    name: "{{ webserver_packages }}"
+    state: present
+  become: yes
+  tags:
+    - webserver
+    - install
+
+- name: Ensure web server is started and enabled
+  service:
+    name: "{{ webserver_service }}"
+    state: started
+    enabled: yes
+  become: yes
+  tags:
+    - webserver
+    - service
+
+- name: Create document root
+  file:
+    path: "{{ document_root }}"
+    state: directory
+    owner: "{{ webserver_user }}"
+    group: "{{ webserver_group }}"
+    mode: '0755'
+  become: yes
+  tags:
+    - webserver
+    - configure
+
+- name: Deploy index page from template
+  template:
+    src: index.html.j2
+    dest: "{{ document_root }}/index.html"
+    owner: "{{ webserver_user }}"
+    group: "{{ webserver_group }}"
+    mode: '0644'
+  become: yes
+  notify: restart webserver
+  tags:
+    - webserver
+    - deploy
+
+- name: Deploy web server configuration
+  template:
+    src: "{{ webserver_config_template }}"
+    dest: "{{ webserver_config_path }}"
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  notify: restart webserver
+  when: webserver_custom_config | default(false)
+  tags:
+    - webserver
+    - configure
+
+- name: Configure firewall for HTTP/HTTPS
+  include_tasks: firewall.yml
+  when: configure_firewall | default(true)
+  tags:
+    - webserver
+    - firewall

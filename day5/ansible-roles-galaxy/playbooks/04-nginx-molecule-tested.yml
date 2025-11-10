@@ -1,0 +1,81 @@
+---
+#=============================================================================
+# Intermediate Playbook 1: Deploy Nginx with Molecule-Tested Role
+#=============================================================================
+# Description: Deploy the nginx-tested role that has been validated with Molecule
+#
+# Usage:
+#   ansible-playbook 04-nginx-molecule-tested.yml -i inventory.ini
+#
+# This playbook demonstrates:
+#   - Using a Molecule-tested role in production
+#   - Confidence in deployment due to automated testing
+#   - Best practices for role testing
+#
+#=============================================================================
+
+- name: Deploy Molecule-Tested Nginx Role
+  hosts: webservers
+  become: true
+  
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg:
+          - "=========================================="
+          - "Deploying Molecule-Tested Nginx Role"
+          - "=========================================="
+          - "This role has been:"
+          - "  ✓ Tested with Molecule"
+          - "  ✓ Validated for idempotence"
+          - "  ✓ Verified with automated tests"
+          - "  ✓ Ready for production"
+          - "=========================================="
+
+  roles:
+    - role: ../../roles/intermediate/nginx-tested
+      vars:
+        site_title: "Production Nginx Server"
+        site_description: "Deployed with confidence using tested roles"
+        nginx_server_name: "{{ ansible_hostname }}"
+
+  post_tasks:
+    - name: Wait for Nginx to be ready
+      wait_for:
+        port: 80
+        timeout: 30
+
+    - name: Test Nginx HTTP response
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}"
+        return_content: true
+      register: http_test
+      delegate_to: localhost
+      become: false
+
+    - name: Test health endpoint
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}/health"
+        return_content: true
+      register: health_test
+      delegate_to: localhost
+      become: false
+
+    - name: Verify Nginx configuration
+      command: nginx -t
+      register: config_test
+      changed_when: false
+
+    - name: Display deployment verification
+      debug:
+        msg:
+          - "=========================================="
+          - "Nginx Deployment Verification"
+          - "=========================================="
+          - "HTTP Response: {{ 'PASS' if http_test.status == 200 else 'FAIL' }}"
+          - "Health Check: {{ 'PASS' if health_test.status == 200 else 'FAIL' }}"
+          - "Config Valid: {{ 'PASS' if config_test.rc == 0 else 'FAIL' }}"
+          - ""
+          - "Access URL: http://{{ ansible_default_ipv4.address }}"
+          - "Health URL: http://{{ ansible_default_ipv4.address }}/health"
+          - "=========================================="

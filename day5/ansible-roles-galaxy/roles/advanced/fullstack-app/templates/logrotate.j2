@@ -1,0 +1,13 @@
+{{ app_log_path }}/*.log {
+    daily
+    rotate {{ app_log_retention }}
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 {{ app_user }} {{ app_group }}
+    sharedscripts
+    postrotate
+        systemctl reload {{ app_name }} > /dev/null 2>&1 || true
+    endscript
+}

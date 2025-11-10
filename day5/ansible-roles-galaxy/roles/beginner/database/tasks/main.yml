@@ -1,0 +1,135 @@
+---
+# tasks file for database
+
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
+  tags:
+    - database
+    - install
+
+- name: Install PostgreSQL packages
+  package:
+    name: "{{ postgresql_packages }}"
+    state: present
+  become: true
+  tags:
+    - database
+    - install
+
+- name: Ensure PostgreSQL service is started and enabled
+  service:
+    name: "{{ postgresql_service }}"
+    state: started
+    enabled: true
+  become: true
+  tags:
+    - database
+    - service
+
+- name: Install Python PostgreSQL library
+  package:
+    name: "{{ python_psycopg2_package }}"
+    state: present
+  become: true
+  tags:
+    - database
+    - install
+
+- name: Create database
+  postgresql_db:
+    name: "{{ db_name }}"
+    encoding: UTF-8
+    lc_collate: en_US.UTF-8
+    lc_ctype: en_US.UTF-8
+    template: template0
+    state: present
+  become: true
+  become_user: postgres
+  tags:
+    - database
+    - configure
+
+- name: Create database user
+  postgresql_user:
+    db: "{{ db_name }}"
+    name: "{{ db_user }}"
+    password: "{{ db_password }}"
+    priv: ALL
+    state: present
+  become: true
+  become_user: postgres
+  no_log: true
+  tags:
+    - database
+    - configure
+
+- name: Configure PostgreSQL authentication
+  template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgresql_config_dir }}/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  become: true
+  notify: restart postgresql
+  when: configure_remote_access
+  tags:
+    - database
+    - configure
+
+- name: Configure PostgreSQL to listen on all interfaces
+  lineinfile:
+    path: "{{ postgresql_config_dir }}/postgresql.conf"
+    regexp: '^#?listen_addresses\s*='
+    line: "listen_addresses = '{{ postgresql_listen_addresses }}'"
+    state: present
+  become: true
+  notify: restart postgresql
+  when: configure_remote_access
+  tags:
+    - database
+    - configure
+
+- name: Create sample table
+  postgresql_query:
+    db: "{{ db_name }}"
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS {{ sample_table_name }} (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100),
+        email VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+  become: true
+  become_user: postgres
+  when: create_sample_table
+  tags:
+    - database
+    - sample-data
+
+- name: Insert sample data
+  postgresql_query:
+    db: "{{ db_name }}"
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_password }}"
+    query: |
+      INSERT INTO {{ sample_table_name }} (name, email) 
+      VALUES 
+        ('John Doe', 'john@example.com'),
+        ('Jane Smith', 'jane@example.com')
+      ON CONFLICT DO NOTHING;
+  become: true
+  become_user: postgres
+  when: create_sample_table and insert_sample_data
+  tags:
+    - database
+    - sample-data
+
+- name: Configure firewall for PostgreSQL
+  include_tasks: firewall.yml
+  when: configure_firewall
+  tags:
+    - database
+    - firewall

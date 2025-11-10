@@ -1,0 +1,14 @@
+---
+# handlers file for database
+
+- name: restart postgresql
+  service:
+    name: "{{ postgresql_service }}"
+    state: restarted
+  become: true
+
+- name: reload postgresql
+  service:
+    name: "{{ postgresql_service }}"
+    state: reloaded
+  become: true

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ site_name }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, {{ site_background_color }}, #667eea);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            padding: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            max-width: 800px;
+        }
+        
+        h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .tagline {
+            font-size: 1.5em;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+        
+        .info-box {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .info-box h2 {
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .info-item:last-child {
+            border-bottom: none;
+        }
+        
+        .label {
+            font-weight: bold;
+        }
+        
+        .value {
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            opacity: 0.8;
+            font-size: 0.9em;
+        }
+        
+        .icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🚀</div>
+        <h1>{{ site_name }}</h1>
+        <p class="tagline">{{ site_tagline }}</p>
+        
+        <div class="info-box">
+            <h2>📊 Server Information</h2>
+            <div class="info-item">
+                <span class="label">Hostname:</span>
+                <span class="value">{{ ansible_hostname }}</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Operating System:</span>
+                <span class="value">{{ ansible_distribution }} {{ ansible_distribution_version }}</span>
+            </div>
+            <div class="info-item">
+                <span class="label">IP Address:</span>
+                <span class="value">{{ ansible_default_ipv4.address }}</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Web Server:</span>
+                <span class="value">{{ webserver_service }}</span>
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <h2>✅ Role Deployment Status</h2>
+            <div class="info-item">
+                <span class="label">Role Name:</span>
+                <span class="value">webserver</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Deployed By:</span>
+                <span class="value">Ansible</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Configuration:</span>
+                <span class="value">{{ document_root }}</span>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>🎓 Ansible Training Day 5 - Roles and Galaxy</p>
+            <p>Deployed on {{ ansible_date_time.date }} at {{ ansible_date_time.time }}</p>
+        </div>
+    </div>
+</body>
+</html>

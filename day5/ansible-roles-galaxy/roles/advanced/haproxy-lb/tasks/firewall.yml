@@ -1,0 +1,58 @@
+---
+# Firewall configuration for HAProxy
+
+- name: Configure UFW firewall (Debian/Ubuntu)
+  block:
+  - name: Install UFW
+    apt:
+      name: ufw
+      state: present
+
+  - name: Allow HAProxy frontend port
+    ufw:
+      rule: allow
+      port: "{{ haproxy_frontend_port }}"
+      proto: tcp
+      comment: "HAProxy Frontend"
+
+  - name: Allow HAProxy stats port
+    ufw:
+      rule: allow
+      port: "{{ haproxy_stats_port }}"
+      proto: tcp
+      comment: "HAProxy Stats"
+    when: haproxy_stats_enabled | bool
+
+  - name: Enable UFW
+    ufw:
+      state: enabled
+  when: ansible_os_family == "Debian"
+
+- name: Configure firewalld (RedHat/CentOS)
+  block:
+  - name: Install firewalld
+    package:
+      name: firewalld
+      state: present
+
+  - name: Start firewalld
+    service:
+      name: firewalld
+      state: started
+      enabled: true
+
+  - name: Allow HAProxy frontend port
+    firewalld:
+      port: "{{ haproxy_frontend_port }}/tcp"
+      permanent: true
+      state: enabled
+      immediate: true
+
+  - name: Allow HAProxy stats port
+    firewalld:
+      port: "{{ haproxy_stats_port }}/tcp"
+      permanent: true
+      state: enabled
+      immediate: true
+    when: haproxy_stats_enabled | bool
+  when: ansible_os_family == "RedHat"

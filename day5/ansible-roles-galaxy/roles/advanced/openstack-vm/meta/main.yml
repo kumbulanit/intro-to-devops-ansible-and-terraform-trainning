@@ -1,0 +1,51 @@
+---
+galaxy_info:
+  role_name: openstack_vm
+  author: Ansible Training Team
+  description: Provision and manage virtual machines on OpenStack cloud infrastructure
+  company: DevOps Training
+  license: MIT
+  
+  min_ansible_version: "2.10"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+    - name: Fedora
+      versions:
+        - "37"
+        - "38"
+  
+  galaxy_tags:
+    - cloud
+    - openstack
+    - provisioning
+    - infrastructure
+    - vm
+    - compute
+    - networking
+    - security
+
+  # Collections this role depends on
+  collections:
+    - openstack.cloud
+
+dependencies: []
+
+# Example role dependencies (if you want to auto-install other roles)
+# dependencies:
+#   - role: common-security
+#     vars:
+#       security_level: high
+#   - role: monitoring-agent
+#     when: enable_monitoring | default(false)

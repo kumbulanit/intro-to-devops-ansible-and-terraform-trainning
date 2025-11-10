@@ -1,0 +1,124 @@
+---
+# HAProxy Load Balancer Deployment - Advanced Example
+# This playbook demonstrates deploying a load balancer with multiple backend servers
+
+- name: Deploy HAProxy Load Balancer
+  hosts: loadbalancer
+  become: true
+  
+  vars:
+    # Backend web servers
+    backend_servers:
+      - name: web01
+        address: 192.168.1.10
+        port: 80
+        check: true
+        weight: 100
+      - name: web02
+        address: 192.168.1.11
+        port: 80
+        check: true
+        weight: 100
+      - name: web03
+        address: 192.168.1.12
+        port: 80
+        check: true
+        weight: 50  # Less weight = less traffic
+        backup: false
+    
+    # HAProxy configuration
+    haproxy_frontend_port: 80
+    haproxy_backend_servers: "{{ backend_servers }}"
+    haproxy_balance_algorithm: roundrobin
+    haproxy_stats_enabled: true
+    haproxy_stats_username: admin
+    haproxy_stats_password: "{{ vault_haproxy_stats_password | default('changeme') }}"
+    
+  pre_tasks:
+    - name: Verify all backend servers are defined
+      assert:
+        that:
+          - backend_servers is defined
+          - backend_servers | length > 0
+        fail_msg: "Backend servers must be defined"
+        success_msg: "{{ backend_servers | length }} backend servers configured"
+    
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Deploying HAProxy Load Balancer"
+          - "Frontend port: {{ haproxy_frontend_port }}"
+          - "Backend servers: {{ backend_servers | length }}"
+          - "Algorithm: {{ haproxy_balance_algorithm }}"
+  
+  roles:
+    - role: advanced/haproxy-lb
+  
+  post_tasks:
+    - name: Wait for HAProxy to be ready
+      wait_for:
+        host: localhost
+        port: "{{ haproxy_frontend_port }}"
+        timeout: 30
+    
+    - name: Test load balancer connectivity
+      uri:
+        url: "http://localhost:{{ haproxy_frontend_port }}"
+        return_content: true
+        status_code: 200
+      register: lb_test
+      ignore_errors: true
+    
+    - name: Display load balancer status
+      debug:
+        msg:
+          - "Load Balancer Status: {{ 'HEALTHY' if lb_test is succeeded else 'UNHEALTHY' }}"
+          - "Stats page: http://{{ ansible_default_ipv4.address }}:8080/stats"
+          - "Username: {{ haproxy_stats_username }}"
+    
+    - name: Save deployment summary
+      copy:
+        content: |
+          HAProxy Load Balancer Deployment Summary
+          =========================================
+          Deployment Date: {{ ansible_date_time.iso8601 }}
+          Hostname: {{ ansible_hostname }}
+          IP Address: {{ ansible_default_ipv4.address }}
+          
+          Configuration:
+          - Frontend Port: {{ haproxy_frontend_port }}
+          - Balance Algorithm: {{ haproxy_balance_algorithm }}
+          - Stats Port: 8080
+          - Stats Username: {{ haproxy_stats_username }}
+          
+          Backend Servers:
+          {% for server in backend_servers %}
+          - {{ server.name }}: {{ server.address }}:{{ server.port }} (weight: {{ server.weight | default(100) }})
+          {% endfor %}
+          
+          Health Status: {{ 'HEALTHY' if lb_test is succeeded else 'UNHEALTHY' }}
+          
+          Access:
+          - Load Balancer: http://{{ ansible_default_ipv4.address }}:{{ haproxy_frontend_port }}
+          - Stats Dashboard: http://{{ ansible_default_ipv4.address }}:8080/stats
+        dest: /tmp/haproxy_deployment_summary.txt
+      delegate_to: localhost
+
+# Second play - Verify backend servers are accessible
+- name: Verify Backend Servers
+  hosts: webservers
+  gather_facts: false
+  
+  tasks:
+    - name: Check web server status
+      uri:
+        url: "http://{{ ansible_host }}:80"
+        return_content: false
+        status_code: 200
+      delegate_to: localhost
+      register: backend_check
+      ignore_errors: true
+    
+    - name: Display backend server status
+      debug:
+        msg: "Backend {{ inventory_hostname }}: {{ 'AVAILABLE' if backend_check is succeeded else 'UNAVAILABLE' }}"

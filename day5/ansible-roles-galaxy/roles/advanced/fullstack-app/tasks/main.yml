@@ -1,0 +1,113 @@
+---
+# Full Stack Application Role - Demonstrates role dependencies
+# This role depends on web server and database roles
+
+- name: Display full stack deployment information
+  debug:
+    msg:
+      - "Deploying Full Stack Application"
+      - "Application: {{ app_name }}"
+      - "Environment: {{ app_environment }}"
+      - "Database backend: PostgreSQL"
+      - "Web server: {{ webserver_type }}"
+
+- name: Create application directory structure
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+  loop:
+    - "{{ app_root }}"
+    - "{{ app_root }}/config"
+    - "{{ app_root }}/logs"
+    - "{{ app_root }}/data"
+    - "{{ app_root }}/uploads"
+
+- name: Deploy application configuration
+  template:
+    src: app_config.ini.j2
+    dest: "{{ app_root }}/config/app.ini"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0640'
+  notify: restart application
+
+- name: Deploy database connection configuration
+  template:
+    src: database.conf.j2
+    dest: "{{ app_root }}/config/database.conf"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0640'
+  notify: restart application
+
+- name: Create application database schema
+  postgresql_db:
+    name: "{{ app_db_name }}"
+    state: present
+  delegate_to: "{{ app_db_host }}"
+  when: app_create_db | bool
+
+- name: Create application database user
+  postgresql_user:
+    name: "{{ app_db_user }}"
+    password: "{{ app_db_password }}"
+    db: "{{ app_db_name }}"
+    priv: ALL
+    state: present
+  delegate_to: "{{ app_db_host }}"
+  when: app_create_db | bool
+
+- name: Deploy application code
+  copy:
+    src: "{{ app_source_path }}/"
+    dest: "{{ app_root }}/"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0755'
+  when: app_source_path is defined
+  notify: restart application
+
+- name: Deploy sample application
+  template:
+    src: sample_app.php.j2
+    dest: "{{ document_root }}/index.php"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: '0644'
+  when: app_deploy_sample | bool
+
+- name: Create application service file
+  template:
+    src: app.service.j2
+    dest: /etc/systemd/system/{{ app_name }}.service
+    mode: '0644'
+  when: app_create_service | bool
+  notify:
+    - reload systemd
+    - restart application
+
+- name: Enable application service
+  service:
+    name: "{{ app_name }}"
+    enabled: true
+    state: started
+  when: app_create_service | bool
+
+- name: Create application logrotate configuration
+  template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/{{ app_name }}
+    mode: '0644'
+
+- name: Display deployment summary
+  debug:
+    msg:
+      - "Full Stack Application Deployed Successfully!"
+      - "Application root: {{ app_root }}"
+      - "Configuration: {{ app_root }}/config/"
+      - "Logs: {{ app_root }}/logs/"
+      - "Database: {{ app_db_name }} on {{ app_db_host }}"
+      - "Web endpoint: http://{{ ansible_default_ipv4.address }}"

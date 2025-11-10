@@ -1,0 +1,33 @@
+---
+galaxy_info:
+  author: Ansible Training
+  description: Basic Apache/Nginx web server role for beginners
+  company: Training Labs
+  
+  license: MIT
+  
+  min_ansible_version: 2.9
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - buster
+        - bullseye
+    - name: EL
+      versions:
+        - 7
+        - 8
+        - 9
+  
+  galaxy_tags:
+    - web
+    - apache
+    - nginx
+    - webserver
+    - http
+
+dependencies: []

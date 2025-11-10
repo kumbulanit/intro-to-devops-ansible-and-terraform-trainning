@@ -1,0 +1,51 @@
+---
+#=============================================================================
+# Beginner Playbook 2: Deploy Database Role
+#=============================================================================
+# Description: Deploy PostgreSQL database using the database role
+#
+# Usage:
+#   ansible-playbook 02-database-basic.yml -i inventory.ini
+#
+# This playbook:
+#   - Installs PostgreSQL
+#   - Creates database and user
+#   - Inserts sample data
+#
+#=============================================================================
+
+- name: Deploy PostgreSQL Database with Role
+  hosts: databases
+  become: true
+  
+  roles:
+    - role: ../../roles/beginner/database
+      vars:
+        db_name: webapp_db
+        db_user: webapp_user
+        db_password: "SecurePassword123!"
+        create_sample_table: true
+        insert_sample_data: true
+        configure_firewall: true
+
+  post_tasks:
+    - name: Verify database is running
+      postgresql_query:
+        db: "{{ db_name }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        query: "SELECT version();"
+      become: true
+      become_user: postgres
+      register: pg_version
+
+    - name: Display database information
+      debug:
+        msg:
+          - "=========================================="
+          - "Database Deployed Successfully!"
+          - "=========================================="
+          - "Database: {{ db_name }}"
+          - "User: {{ db_user }}"
+          - "PostgreSQL Version: {{ pg_version.query_result[0].version }}"
+          - "=========================================="

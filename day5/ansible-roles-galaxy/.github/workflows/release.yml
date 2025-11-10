@@ -1,0 +1,126 @@
+---
+name: Release to Ansible Galaxy
+
+on:
+  push:
+    tags:
+    - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      role_name:
+        description: 'Role to release (e.g., beginner/webserver)'
+        required: true
+      version:
+        description: 'Version to release'
+        required: true
+
+jobs:
+  release:
+    name: Release to Galaxy
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Ansible
+      run: |
+        pip install ansible-core
+
+    - name: Get version from tag
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          echo "role=${{ github.event.inputs.role_name }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          echo "role=all" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Validate role structure
+      run: |
+        if [ "${{ steps.get_version.outputs.role }}" != "all" ]; then
+          cd roles/${{ steps.get_version.outputs.role }}
+          
+          # Check required files
+          for file in tasks/main.yml defaults/main.yml meta/main.yml README.md; do
+            if [ ! -f "$file" ]; then
+              echo "Error: Missing required file: $file"
+              exit 1
+            fi
+          done
+          
+          echo "Role validation passed!"
+        fi
+
+    - name: Build role package
+      run: |
+        if [ "${{ steps.get_version.outputs.role }}" != "all" ]; then
+          cd roles/${{ steps.get_version.outputs.role }}
+          tar -czf ../../${GITHUB_REF##*/}.tar.gz .
+        fi
+
+    - name: Import role to Galaxy
+      run: |
+        if [ "${{ steps.get_version.outputs.role }}" != "all" ]; then
+          ansible-galaxy role import \
+            --api-key ${{ secrets.GALAXY_API_KEY }} \
+            --role-name $(basename ${{ steps.get_version.outputs.role }}) \
+            ${{ github.repository_owner }} \
+            ${{ github.event.repository.name }}
+        fi
+      env:
+        ANSIBLE_GALAXY_SERVER: https://galaxy.ansible.com
+
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ steps.get_version.outputs.version }}
+        body: |
+          ## Release ${{ steps.get_version.outputs.version }}
+
+          ### Changes
+          - Automated release from GitHub Actions
+          - Role: ${{ steps.get_version.outputs.role }}
+
+          ### Installation
+          ```bash
+          ansible-galaxy install ${{ github.repository_owner }}.$(basename ${{ steps.get_version.outputs.role }})
+          ```
+        draft: false
+        prerelease: false
+
+  # Update Galaxy metadata
+  update-metadata:
+    name: Update Galaxy Metadata
+    runs-on: ubuntu-latest
+    needs: release
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Update role versions in meta files
+      run: |
+        # Update version in all meta/main.yml files
+        find roles -name "meta/main.yml" -type f | while read meta_file; do
+          echo "Updating version in $meta_file"
+          sed -i "s/version: .*/version: ${{ steps.get_version.outputs.version }}/" "$meta_file"
+        done
+
+    - name: Commit version updates
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git commit -m "Update role versions to ${{ steps.get_version.outputs.version }}" || echo "No changes to commit"
+        git push || echo "Nothing to push"

@@ -1,0 +1,42 @@
+---
+galaxy_info:
+  role_name: fullstack_app
+  author: Ansible Training Team
+  description: Complete full-stack application deployment with database and web server dependencies
+  company: DevOps Training
+  license: MIT
+  
+  min_ansible_version: "2.10"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  
+  galaxy_tags:
+    - application
+    - fullstack
+    - web
+    - database
+    - deployment
+
+# Role Dependencies
+# These roles will be automatically installed and executed before this role
+dependencies:
+  - role: beginner/database
+    vars:
+      db_name: "{{ app_db_name }}"
+      db_user: "{{ app_db_user }}"
+      db_password: "{{ app_db_password }}"
+      db_host: "{{ app_db_host }}"
+  
+  - role: beginner/webserver
+    vars:
+      server_name: "{{ server_name }}"
+      document_root: "{{ document_root }}"
+      enable_ssl: "{{ enable_ssl }}"

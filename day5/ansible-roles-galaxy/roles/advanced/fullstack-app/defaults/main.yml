@@ -1,0 +1,36 @@
+---
+# Full Stack Application Role - Default Variables
+
+# Application configuration
+app_name: myapp
+app_environment: production
+app_root: /opt/myapp
+app_user: www-data
+app_group: www-data
+
+# Application source
+app_source_path: ""  # Path to application files (optional)
+app_deploy_sample: true  # Deploy sample PHP application
+
+# Database configuration
+app_db_host: localhost
+app_db_name: "{{ app_name }}_{{ app_environment }}"
+app_db_user: "{{ app_name }}_user"
+app_db_password: changeme  # Use Ansible Vault in production
+app_create_db: true
+
+# Web server configuration (passed to webserver role)
+webserver_type: nginx  # nginx or apache
+server_name: "{{ ansible_fqdn }}"
+document_root: "{{ app_root }}/public"
+enable_ssl: false
+
+# Service configuration
+app_create_service: false  # Create systemd service
+app_service_description: "{{ app_name | title }} Application"
+app_service_user: "{{ app_user }}"
+
+# Logging
+app_log_level: info
+app_log_path: "{{ app_root }}/logs"
+app_log_retention: 7  # days

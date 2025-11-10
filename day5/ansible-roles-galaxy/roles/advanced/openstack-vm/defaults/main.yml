@@ -1,0 +1,43 @@
+---
+# defaults file for openstack-vm
+
+# OpenStack cloud configuration
+cloud_name: devstack
+
+# VM configuration
+vm_name: ansible-test-vm
+vm_image: ubuntu-22.04
+vm_flavor: m1.small
+vm_user: ubuntu
+key_name: my-keypair
+network_name: private
+ssh_key_file: ~/.ssh/id_rsa
+
+# Security group
+security_group_name: ansible-sg
+
+# Security rules (SSH, HTTP, HTTPS)
+security_rules:
+  - protocol: tcp
+    port_min: 22
+    port_max: 22
+    cidr: 0.0.0.0/0
+  - protocol: tcp
+    port_min: 80
+    port_max: 80
+    cidr: 0.0.0.0/0
+  - protocol: tcp
+    port_min: 443
+    port_max: 443
+    cidr: 0.0.0.0/0
+  - protocol: icmp
+    port_min: -1
+    port_max: -1
+    cidr: 0.0.0.0/0
+
+# Networking
+assign_floating_ip: true
+
+# Inventory groups to add the VM to
+vm_groups:
+  - openstack_vms

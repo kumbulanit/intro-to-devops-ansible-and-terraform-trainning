@@ -1,0 +1,46 @@
+<VirtualHost *:{{ webserver_http_port }}>
+    ServerAdmin webmaster@localhost
+    DocumentRoot {{ document_root }}
+    
+    <Directory {{ document_root }}>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    ErrorLog {{ error_log }}
+    CustomLog {{ access_log }} combined
+    
+    # Performance settings
+    {% if keep_alive %}
+    KeepAlive On
+    KeepAliveTimeout {{ keep_alive_timeout }}
+    {% else %}
+    KeepAlive Off
+    {% endif %}
+    
+    # Security headers
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+</VirtualHost>
+
+{% if enable_ssl %}
+<VirtualHost *:{{ webserver_https_port }}>
+    ServerAdmin webmaster@localhost
+    DocumentRoot {{ document_root }}
+    
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/ssl-cert-snakeoil.pem
+    SSLCertificateKeyFile /etc/ssl/private/ssl-cert-snakeoil.key
+    
+    <Directory {{ document_root }}>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    ErrorLog {{ error_log }}
+    CustomLog {{ access_log }} combined
+</VirtualHost>
+{% endif %}

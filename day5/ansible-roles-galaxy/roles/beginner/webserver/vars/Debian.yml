@@ -1,0 +1,13 @@
+---
+# vars file for Debian-based systems (Ubuntu, Debian)
+
+webserver_packages:
+- apache2
+- apache2-utils
+
+webserver_service: apache2
+webserver_user: www-data
+webserver_group: www-data
+webserver_config_path: /etc/apache2/sites-available/000-default.conf
+webserver_config_dir: /etc/apache2/sites-available
+document_root: /var/www/html

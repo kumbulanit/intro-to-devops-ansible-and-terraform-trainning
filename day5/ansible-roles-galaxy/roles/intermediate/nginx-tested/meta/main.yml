@@ -1,0 +1,35 @@
+---
+galaxy_info:
+  role_name: nginx_tested
+  author: Ansible Training
+  description: Production-ready Nginx role with comprehensive Molecule tests
+  company: Training Labs
+  
+  license: MIT
+  
+  min_ansible_version: "2.10"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - buster
+        - bullseye
+        - bookworm
+  
+  galaxy_tags:
+    - nginx
+    - web
+    - webserver
+    - tested
+    - molecule
+    - ci
+    - production
+
+dependencies: []
+
+collections:
+  - community.general

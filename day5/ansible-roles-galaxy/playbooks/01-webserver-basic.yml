@@ -1,0 +1,39 @@
+---
+#=============================================================================
+# Beginner Playbook 1: Deploy Web Server Role
+#=============================================================================
+# Description: Basic playbook demonstrating how to use the webserver role
+#
+# Usage:
+#   ansible-playbook 01-webserver-basic.yml -i inventory.ini
+#
+# This playbook:
+#   - Deploys Apache web server
+#   - Configures firewall
+#   - Deploys a custom index page
+#
+#=============================================================================
+
+- name: Deploy Web Server with Role
+  hosts: webservers
+  become: true
+  
+  roles:
+    - role: ../../roles/beginner/webserver
+      vars:
+        site_name: "My First Ansible Role"
+        site_tagline: "Deployed from Day 5 Labs"
+        site_background_color: "#3498db"
+        configure_firewall: true
+
+  post_tasks:
+    - name: Display access information
+      debug:
+        msg:
+          - "=========================================="
+          - "Web Server Deployed Successfully!"
+          - "=========================================="
+          - "Access URL: http://{{ ansible_default_ipv4.address }}"
+          - "Document Root: {{ document_root }}"
+          - "Service: {{ webserver_service }}"
+          - "=========================================="

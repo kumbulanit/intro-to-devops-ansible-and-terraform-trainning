@@ -1,0 +1,18 @@
+---
+# Restart application service
+- name: restart application
+  service:
+    name: "{{ app_name }}"
+    state: restarted
+  when: app_create_service | bool
+
+# Reload systemd daemon
+- name: reload systemd
+  systemd:
+    daemon_reload: true
+
+# Reload web server
+- name: reload webserver
+  service:
+    name: "{{ 'nginx' if webserver_type == 'nginx' else 'apache2' }}"
+    state: reloaded
