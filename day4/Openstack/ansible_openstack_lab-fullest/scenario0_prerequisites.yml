@@ -87,19 +87,24 @@
     loop: "{{ existing_images.results }}"
     when: item.images | length == 0
     register: download_result
+    ignore_errors: yes
     loop_control:
       label: "{{ item.item.name }}"
 
   - name: Display download progress
     debug:
       msg: |
+        {% if item.failed | default(false) %}
+        Failed to download: {{ item.item.item.name }} - {{ item.msg | default('Download error') }}
+        {% elif item.changed | default(false) %}
         Downloaded: {{ item.item.item.name }}
         Size: {{ (item.size | default(0) / 1024 / 1024) | round(2) }} MB
         Location: {{ download_dir }}/{{ item.item.item.name }}.{{ item.item.item.format }}
+        {% else %}
+        Skipped: {{ item.item.item.name }}
+        {% endif %}
     loop: "{{ download_result.results }}"
-    when:
-    - item is defined
-    - item.changed | default(false)
+    when: item is defined
     loop_control:
       label: "{{ item.item.item.name }}"
 
@@ -118,8 +123,11 @@
         os_type: "linux"
         description: "{{ item.item.description }}"
     loop: "{{ existing_images.results }}"
-    when: item.images | length == 0
+    when:
+    - item.images | length == 0
+    - download_result.results | selectattr('item.item.name', 'equalto', item.item.name) | selectattr('failed', 'undefined') | list | length > 0
     register: upload_result
+    ignore_errors: yes
     loop_control:
       label: "{{ item.item.name }}"
 
@@ -128,7 +136,9 @@
       cloud: "{{ cloud_name }}"
       image: "{{ item.item.name }}"
     loop: "{{ existing_images.results }}"
-    when: item.images | length == 0
+    when:
+    - item.images | length == 0
+    - upload_result.results | selectattr('item.item.name', 'equalto', item.item.name) | selectattr('failed', 'undefined') | list | length > 0
     register: image_status
     until: image_status.images[0].status == 'active'
     retries: 30
@@ -145,6 +155,8 @@
         bootable: "true"
       state: present
     loop: "{{ images }}"
+    when: item.name in (final_images.images | default([]) | map(attribute='name') | list)
+    ignore_errors: yes
     loop_control:
       label: "{{ item.name }}"
 
@@ -157,7 +169,7 @@
     debug:
       msg: |
         ╔════════════════════════════════════════════════════════════════╗
-        ║              Images Successfully Configured                    ║
+        ║              Images Configuration Summary                      ║
         ╚════════════════════════════════════════════════════════════════╝
 
         Available Images:
@@ -171,6 +183,16 @@
           - Bootable: {{ img.properties.bootable | default('true') }}
         {% endfor %}
 
+        {% set failed_downloads = download_result.results | selectattr('failed', 'defined') | selectattr('failed') | list %}
+        {% if failed_downloads | length > 0 %}
+
+        Failed Downloads (skipped):
+        {% for failed in failed_downloads %}
+        ✗ {{ failed.item.item.name }} - {{ failed.msg | default('Download failed') }}
+        {% endfor %}
+        {% endif %}
+
+        Successfully configured: {{ final_images.images | selectattr('name', 'in', images | map(attribute='name') | list) | list | length }} / {{ images | length }} images
         Images are ready for use in your OpenStack scenarios!
 
   - name: Clean up downloaded image files (optional)
