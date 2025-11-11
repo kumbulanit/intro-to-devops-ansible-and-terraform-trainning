@@ -21,12 +21,8 @@
   openstack.cloud.router:
     name: "{{ router_name }}"
     network: public
-    state: present
-
-- name: Attach subnet to router
-  openstack.cloud.router_interface:
-    router: "{{ router_name }}"
-    subnet: "{{ subnet_name }}"
+    interfaces:
+    - subnet: "{{ subnet_name }}"
     state: present
 
 - name: Create security group

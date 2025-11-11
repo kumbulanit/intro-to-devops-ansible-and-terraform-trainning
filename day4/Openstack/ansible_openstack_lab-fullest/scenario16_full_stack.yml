@@ -133,64 +133,7 @@
 
   # Volumes for all VMs
   - name: Provision volumes for web tier
-    vars:
-      current_web_name: "{{ web_prefix }}{{ web_index }}"
-      current_web_volume: "{{ web_prefix }}{{ web_index }}-volume"
-    block:
-    - name: Create volume for {{ current_web_name }}
-      openstack.cloud.volume:
-        cloud: "{{ cloud_name }}"
-        name: "{{ current_web_volume }}"
-        size: "{{ volume_size_web }}"
-        image: "{{ image_name }}"
-        bootable: true
-        state: present
-      register: web_volume_create
-
-    - name: Record volume id for {{ current_web_volume }}
-      set_fact:
-        current_web_volume_id: "{{ web_volume_create.volume.id | default(web_volume_create.id) }}"
-
-    - name: Wait for {{ current_web_volume }} readiness
-      openstack.cloud.volume_info:
-        cloud: "{{ cloud_name }}"
-        filters:
-          id: "{{ current_web_volume_id }}"
-      register: web_volume_status
-      until: >-
-        (web_volume_status.volumes is defined) and (web_volume_status.volumes | length > 0) and ((web_volume_status.volumes[0].status | default('creating')) in ['available', 'in-use', 'error'])
-      retries: 30
-      delay: 5
-      failed_when: >-
-        web_volume_status.failed | default(false) or (
-          (web_volume_status.volumes is defined)
-          and (web_volume_status.volumes | length > 0)
-          and ((web_volume_status.volumes[0].status | default('error')) == 'error')
-        )
-
-    - name: Ensure {{ current_web_volume }} stays bootable
-      command: "openstack volume set --bootable {{ current_web_volume_id }}"
-      environment:
-        OS_CLOUD: "{{ cloud_name }}"
-      ignore_errors: yes
-
-    - name: Cache {{ current_web_volume }} details
-      set_fact:
-        current_web_volume_details: >-
-          {{ web_volume_status.volumes[0]
-             if (web_volume_status.volumes is defined and web_volume_status.volumes | length > 0)
-             else (web_volume_create.volume if (web_volume_create.volume is defined) else web_volume_create) }}
-
-    - name: Append {{ current_web_volume }} metadata
-      set_fact:
-        web_volume_records: "{{ (web_volume_records | default([])) + [ web_volume_payload ] }}"
-      vars:
-        web_volume_payload:
-          server_name: "{{ current_web_name }}"
-          volume_name: "{{ current_web_volume }}"
-          volume_id: "{{ current_web_volume_details.id }}"
-          status: "{{ current_web_volume_details.status }}"
-          bootable: "{{ current_web_volume_details.is_bootable }}"
+    include_tasks: tasks/provision_web16_volume.yml
     loop: "{{ range(1, web_count + 1) | list }}"
     loop_control:
       loop_var: web_index
