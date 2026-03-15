@@ -1,0 +1,23 @@
+---
+- name: Ensure SSH keypair exists for role deployment
+  openstack.cloud.keypair:
+    cloud: "{{ cloud_name }}"
+    name: "{{ keypair_name }}"
+    public_key_file: "~/.ssh/id_rsa.pub"
+    state: present
+
+- name: Launch VMs defined by the role
+  openstack.cloud.server:
+    cloud: "{{ cloud_name }}"
+    name: "{{ item.name }}"
+    image: "{{ item.image | default(image_name) }}"
+    flavor: "{{ item.flavor | default(flavor_name) }}"
+    network: "{{ item.network | default(network_name) }}"
+    key_name: "{{ item.key_name | default(keypair_name) }}"
+    auto_ip: "{{ item.auto_ip | default(true) }}"
+    wait: true
+    timeout: "{{ item.timeout | default(600) }}"
+    state: present
+  loop: "{{ vm_definitions }}"
+  loop_control:
+    label: "{{ item.name }}"

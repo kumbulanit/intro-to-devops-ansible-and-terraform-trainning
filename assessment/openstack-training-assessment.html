@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenStack Training Repo Assessment</title>
+  <style>
+    :root {
+      --ink: #1f2430;
+      --muted: #5d6678;
+      --paper: #f6f1e8;
+      --panel: rgba(255, 252, 247, 0.9);
+      --line: rgba(31, 36, 48, 0.12);
+      --accent: #b5522d;
+      --accent-deep: #6f2d19;
+      --gold: #d5a43a;
+      --good: #21693d;
+      --bad: #9b2f2f;
+      --shadow: 0 18px 48px rgba(50, 39, 24, 0.14);
+      --headline: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+      --body: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+      --mono: "SFMono-Regular", "Menlo", "Consolas", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--body);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(213, 164, 58, 0.18), transparent 32%),
+        radial-gradient(circle at top right, rgba(181, 82, 45, 0.18), transparent 28%),
+        linear-gradient(180deg, #f9f5ee 0%, #efe6d7 100%);
+      line-height: 1.6;
+    }
+
+    .frame {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 40px 20px 72px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(35, 31, 32, 0.95), rgba(90, 36, 19, 0.93)),
+        linear-gradient(90deg, rgba(213, 164, 58, 0.2), transparent);
+      color: #fffaf2;
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      padding: 48px 40px;
+      margin-bottom: 28px;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -8% -18% auto;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 214, 121, 0.35), transparent 70%);
+      transform: rotate(18deg);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-family: var(--headline);
+      font-size: 0.82rem;
+      color: #ffd68d;
+      margin-bottom: 16px;
+    }
+
+    h1, h2, h3 {
+      font-family: var(--headline);
+      line-height: 1.1;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 5vw, 4.2rem);
+      max-width: 10ch;
+      margin-bottom: 18px;
+    }
+
+    .hero p {
+      max-width: 72ch;
+      margin: 0 0 14px;
+      font-size: 1.04rem;
+      color: rgba(255, 250, 242, 0.9);
+    }
+
+    .hero-note {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+      padding: 10px 14px;
+      border: 1px solid rgba(255, 214, 141, 0.24);
+      border-radius: 999px;
+      font-family: var(--headline);
+      font-size: 0.92rem;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+
+    .card {
+      grid-column: span 12;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 26px 24px;
+      backdrop-filter: blur(8px);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 14px;
+    }
+
+    .metric {
+      padding: 18px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(31, 36, 48, 0.08);
+    }
+
+    .metric strong {
+      display: block;
+      font-family: var(--headline);
+      font-size: 1.9rem;
+      color: var(--accent-deep);
+    }
+
+    .metric span {
+      display: block;
+      font-size: 0.92rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 18px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-family: var(--headline);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 14px;
+    }
+
+    .status.bad {
+      color: var(--bad);
+      background: rgba(155, 47, 47, 0.12);
+    }
+
+    .status.good {
+      color: var(--good);
+      background: rgba(33, 105, 61, 0.12);
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    li + li {
+      margin-top: 10px;
+    }
+
+    .section-title {
+      font-size: 1.55rem;
+      margin-bottom: 16px;
+      color: var(--accent-deep);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.97rem;
+      overflow: hidden;
+      border-radius: 16px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      font-family: var(--headline);
+      font-size: 0.84rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(181, 82, 45, 0.06);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.92em;
+      background: rgba(31, 36, 48, 0.07);
+      padding: 0.15em 0.35em;
+      border-radius: 6px;
+    }
+
+    .callout {
+      border-left: 4px solid var(--gold);
+      padding: 14px 16px;
+      background: rgba(213, 164, 58, 0.08);
+      border-radius: 0 16px 16px 0;
+      color: var(--ink);
+    }
+
+    .foot {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-top: 12px;
+    }
+
+    @media (min-width: 900px) {
+      .span-7 {
+        grid-column: span 7;
+      }
+
+      .span-5 {
+        grid-column: span 5;
+      }
+
+      .span-6 {
+        grid-column: span 6;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="frame">
+    <section class="hero">
+      <div class="eyebrow">Repo Assessment</div>
+      <h1>OpenStack Training Repo Health Check</h1>
+      <p>This assessment covers the executable lesson assets across the training repository, with special focus on the Ubuntu-compatible OpenStack path in <code>day4</code>, the role-driven material in <code>day5</code>, and the advanced playbook lessons in <code>Day6</code>.</p>
+      <p>The repo is now in a materially stronger state: parser failures were removed, role resolution was normalized, the OpenStack installer now uses a project-local virtual environment, and the DevStack cluster scripts were hardened for Ubuntu/LXD usage.</p>
+      <div class="hero-note">Assessment date: 2026-03-15</div>
+    </section>
+
+    <section class="card">
+      <h2 class="section-title">Headline Results</h2>
+      <div class="metrics">
+        <div class="metric">
+          <strong>142</strong>
+          <span>YAML files parsed successfully after fixes</span>
+        </div>
+        <div class="metric">
+          <strong>13</strong>
+          <span>Shell scripts passing <code>bash -n</code></span>
+        </div>
+        <div class="metric">
+          <strong>43</strong>
+          <span><code>day4</code> top-level playbooks passing syntax check</span>
+        </div>
+        <div class="metric">
+          <strong>10</strong>
+          <span><code>day5/ansible-tower-awx</code> playbooks syntax-clean</span>
+        </div>
+        <div class="metric">
+          <strong>8</strong>
+          <span><code>day5/ansible-roles-galaxy</code> playbooks syntax-clean</span>
+        </div>
+        <div class="metric">
+          <strong>18</strong>
+          <span><code>Day6</code> playbooks syntax-clean</span>
+        </div>
+        <div class="metric">
+          <strong>1</strong>
+          <span>OpenStack install path executed successfully via <code>quick-install.sh</code></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card span-6">
+        <div class="status bad">Before</div>
+        <h2 class="section-title">Initial Failures</h2>
+        <ul>
+          <li><code>scenario0_prerequisites.yml</code> failed syntax checks because a debug message block was malformed.</li>
+          <li><code>day5/ansible-tower-awx/playbooks/10-deploy-everything-single-instance.yml</code> and <code>02-install-awx-openstack.yml</code> used unescaped Docker Go templates that Ansible parsed as broken YAML/Jinja.</li>
+          <li><code>day5/ansible-roles-galaxy/roles/beginner/database/vars/RedHat.yml</code> started with invalid text and broke YAML parsing.</li>
+          <li><code>scenario9_roles_multivm.yml</code> referenced a role that did not exist.</li>
+          <li>Several teardown playbooks called <code>openstack.cloud.router_interface</code>, which is not available in the installed <code>openstack.cloud</code> collection.</li>
+          <li>The OpenStack install scripts relied on direct <code>pip install --user</code>, which is brittle on Ubuntu 24.04 due to system-managed Python packaging.</li>
+          <li><code>deploy_three_devstacks.sh</code> built remote shell commands with literal <code>\n</code> sequences, creating runtime breakage inside containers.</li>
+          <li><code>deploy_three_devstack_instances.sh</code> contained a stray <code>EOF</code> path and was missing important nested-container runtime settings for DevStack.</li>
+        </ul>
+      </article>
+
+      <article class="card span-6">
+        <div class="status good">After</div>
+        <h2 class="section-title">What Was Fixed</h2>
+        <ul>
+          <li>The broken YAML and AWX playbook parser issues were corrected, and all checked executable playbooks now pass syntax validation.</li>
+          <li>A shared root <code>ansible.cfg</code> now defines <code>roles_path</code>, which makes the in-repo lesson roles discoverable when the repo is run from its root.</li>
+          <li>A real <code>roles/vm_deployment</code> role was added so Scenario 9 is now a functioning role-based lesson instead of a missing stub.</li>
+          <li>Router teardown steps were updated to use the OpenStack CLI, matching the installed tooling and removing unsupported module usage.</li>
+          <li>The day4 OpenStack installers now use a local <code>.venv</code>, work from any directory, and were validated by actually creating the environment and verifying the SDK plus collection installation.</li>
+          <li>The DevStack cluster scripts were hardened for Ubuntu: container nesting/privileged settings were added, kvm passthrough is attempted when available, and a generated clouds file is produced for the triple-stack workflow.</li>
+          <li>Fact-independent timestamps replaced <code>ansible_date_time</code> in places where the lessons were running with <code>gather_facts: false</code>.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card span-7">
+        <h2 class="section-title">Validation Matrix</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Check</th>
+              <th>Before</th>
+              <th>After</th>
+              <th>Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Repo-wide YAML parsing</td>
+              <td>2 hard failures</td>
+              <td>142/142 parsed</td>
+              <td>Pass</td>
+            </tr>
+            <tr>
+              <td>Shell syntax with <code>bash -n</code></td>
+              <td>13/13 parsed</td>
+              <td>13/13 parsed</td>
+              <td>Pass</td>
+            </tr>
+            <tr>
+              <td><code>day4</code> top-level scenarios and teardowns</td>
+              <td>Unsupported module + missing role failures</td>
+              <td>43/43 syntax-clean</td>
+              <td>Pass</td>
+            </tr>
+            <tr>
+              <td><code>day4</code> nested playbooks</td>
+              <td>Not fully validated</td>
+              <td>7/7 syntax-clean</td>
+              <td>Pass</td>
+            </tr>
+            <tr>
+              <td><code>day5/ansible-tower-awx</code></td>
+              <td>2 parser failures</td>
+              <td>10/10 syntax-clean</td>
+              <td>Pass</td>
+            </tr>
+            <tr>
+              <td><code>day5/ansible-roles-galaxy</code></td>
+              <td>3 role-resolution failures</td>
+              <td>8/8 syntax-clean</td>
+              <td>Pass</td>
+            </tr>
+            <tr>
+              <td><code>Day6</code> advanced playbooks</td>
+              <td>Not fully validated</td>
+              <td>18/18 syntax-clean</td>
+              <td>Pass</td>
+            </tr>
+            <tr>
+              <td>OpenStack quick installer</td>
+              <td>Unverified and Ubuntu-fragile</td>
+              <td>Executed successfully, created <code>.venv</code></td>
+              <td>Pass</td>
+            </tr>
+            <tr>
+              <td>Venv Ansible validation</td>
+              <td>Not available</td>
+              <td><code>ansible [core 2.16.17]</code>, <code>openstack.cloud 2.5.0</code>, <code>test-openstack.yml</code> syntax-clean</td>
+              <td>Pass</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card span-5">
+        <h2 class="section-title">Key Deliverables</h2>
+        <ul>
+          <li><code>ansible.cfg</code> added at repo root for shared role discovery.</li>
+          <li><code>day4/Openstack/ansible_openstack_lab-fullest/deploy_three_devstack_instances.sh</code> rebuilt into a safer Ubuntu/LXD entry point.</li>
+          <li><code>day4/Openstack/scripts/deploy_three_devstacks.sh</code> fixed so container bootstrap commands execute correctly.</li>
+          <li><code>day4/Openstack/ansible_openstack_lab-fullest/quick-install.sh</code> and <code>setup.sh</code> now install into a local virtual environment.</li>
+          <li><code>day4/Openstack/ansible_openstack_lab-fullest/roles/vm_deployment</code> added for Scenario 9.</li>
+          <li>Documentation updated in the installation and triple-DevStack guides to reflect the new workflow.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2 class="section-title">Environment Notes</h2>
+      <div class="callout">
+        The code was assessed from this workspace with Ansible and Python available locally, but without a live Ubuntu LXD host that could actually launch and finish a triple DevStack/OpenStack deployment. The cluster automation scripts were shell-validated and hardened specifically for that Ubuntu path, but the full control-plane bring-up still needs to be executed on a real Ubuntu host with LXD, nested virtualization support, and sufficient RAM/disk.
+      </div>
+      <p class="foot">That means the repo is now in a much better state to perform that deployment, but the final proof of a working full OpenStack cluster still depends on running the cluster scripts in the correct target environment.</p>
+    </section>
+  </main>
+</body>
+</html>

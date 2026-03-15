@@ -3,6 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars:
+    cloud_name: "mycloud"
     servers_to_delete: ["basic-vm", "frontend", "backend", "vm-from-volume"]
     networks_to_delete: ["frontend-net", "backend-net", "training-net"]
     router_name: "training-router"
@@ -14,10 +15,10 @@
       loop: "{{ servers_to_delete }}"
 
     - name: Remove router interface
-      openstack.cloud.router_interface:
-        router: "{{ router_name }}"
-        subnet: "training-subnet"
-        state: absent
+      command: "openstack router remove subnet {{ router_name }} training-subnet"
+      environment:
+        OS_CLOUD: "{{ cloud_name }}"
+      changed_when: true
       ignore_errors: true
 
     - name: Delete router

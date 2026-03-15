@@ -398,7 +398,7 @@
           AWX Installation Access Information
           ====================================
           
-          Date: {{ ansible_date_time.iso8601 }}
+          Date: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
           Server: {{ inventory_hostname }} ({{ ansible_host }})
           
           Access URL: http://{{ ansible_host }}:{{ awx_host_port }}

@@ -25,10 +25,12 @@ The `deploy_three_devstack_instances.sh` script performs the following:
 2. Launches containers `cloud-a`, `cloud-b`, `cloud-c` with static management IPs.
 3. Installs DevStack prerequisites, clones DevStack (branch configurable via `$STACK_BRANCH`).
 4. Writes customized `local.conf` per container with unique fixed/floating ranges and region names.
-5. Adds host port proxies so you can reach:
+5. Enables the LXD container settings DevStack needs for nested virtualization (`security.nesting` and `security.privileged`).
+6. Adds host port proxies so you can reach:
    - Horizon (dashboard) on ports `18080`, `28080`, `38080`.
    - Keystone public API on ports `15000`, `25000`, `35000`.
-6. Optionally runs `stack.sh` automatically if `AUTO_RUN_STACK=true`.
+7. Generates `generated-clouds.yaml` with ready-to-copy OpenStack client profiles.
+8. Optionally runs `stack.sh` automatically if `AUTO_RUN_STACK=true`.
 
 Multiple runs are idempotent; set `FORCE_REDEPLOY=true` to rebuild containers from scratch.
 
@@ -46,7 +48,7 @@ Environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `STACK_BRANCH` | `2024.1` | DevStack/OpenStack release branch. |
+| `STACK_BRANCH` | `stable/2024.2` | DevStack/OpenStack release branch. |
 | `ADMIN_PASSWORD` | `SuperStackPass!` | Admin/service passwords injected into each stack. |
 | `AUTO_RUN_STACK` | `false` | Set to `true` to run `./stack.sh` automatically (blocking). |
 | `FORCE_REDEPLOY` | `false` | Set to `true` to delete/recreate containers and networks. |
@@ -119,7 +121,7 @@ clouds:
       project_domain_name: Default
 ```
 
-Adjust the host IP and password to match your environment.
+The script also writes this data to `generated-clouds.yaml`, so you can copy the generated file instead of transcribing the example manually.
 
 ## 5. Verification Checklist
 

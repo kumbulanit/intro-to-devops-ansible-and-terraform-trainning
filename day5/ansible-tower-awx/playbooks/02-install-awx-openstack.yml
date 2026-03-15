@@ -825,7 +825,7 @@
     # =========================================================================
 
     - name: Get container status
-      command: docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+      command: 'docker ps --format "table {{"{{"}}.Names{{"}}"}}\t{{"{{"}}.Status{{"}}"}}\t{{"{{"}}.Ports{{"}}"}}"'
       register: container_status
       changed_when: false
 

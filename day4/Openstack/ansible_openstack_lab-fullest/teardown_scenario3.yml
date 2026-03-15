@@ -1,12 +1,14 @@
 ---
 - name: Teardown Scenario 3 - Router
   hosts: localhost
+  vars:
+    cloud_name: "mycloud"
   tasks:
     - name: Detach subnet from router
-      openstack.cloud.router_interface:
-        router: "training-router"
-        subnet: "training-subnet"
-        state: absent
+      command: "openstack router remove subnet training-router training-subnet"
+      environment:
+        OS_CLOUD: "{{ cloud_name }}"
+      changed_when: true
       ignore_errors: true
 
     - name: Delete router

@@ -187,7 +187,7 @@
         content: |
           OpenStack Deployment Summary
           ========================================
-          Deployed: {{ ansible_date_time.iso8601 }}
+          Deployed: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
           
           Web Server:
             Name: web-server

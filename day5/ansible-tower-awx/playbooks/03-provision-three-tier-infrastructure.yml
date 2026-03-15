@@ -181,7 +181,7 @@
         mode: '0644'
         content: |
           # Three-Tier Application Inventory
-          # Generated: {{ ansible_date_time.iso8601 }}
+          # Generated: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
           
           [loadbalancers]
           {% for instance in launched_instances.results %}
@@ -228,7 +228,7 @@
           =====================================
           Three-Tier Infrastructure Details
           =====================================
-          Deployed: {{ ansible_date_time.iso8601 }}
+          Deployed: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
           Cloud: {{ cloud_name }}
           
           LOAD BALANCER TIER

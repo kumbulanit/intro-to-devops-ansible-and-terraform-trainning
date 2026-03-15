@@ -261,7 +261,7 @@
         content: |
           High Availability Infrastructure Deployment
           ============================================
-          Deployment Date: {{ ansible_date_time.iso8601 }}
+          Deployment Date: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
           
           Load Balancer:
           - IP: {{ lb_ip }}

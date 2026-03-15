@@ -1,20 +1,24 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ################################################################################
-# OpenStack Ansible Lab - Complete Setup Script
-# This script installs all necessary dependencies for OpenStack Ansible modules
+# OpenStack Ansible Lab - Interactive Setup Script
+# Installs dependencies into a project-local virtual environment and prepares
+# the lab for Ubuntu 22.04/24.04 hosts.
 ################################################################################
 
-set -e  # Exit on error
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_BIN=${PYTHON:-python3}
+VENV_DIR=${VENV_DIR:-"${SCRIPT_DIR}/.venv"}
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Functions
 print_header() {
     echo -e "\n${BLUE}========================================${NC}"
     echo -e "${BLUE}$1${NC}"
@@ -22,126 +26,129 @@ print_header() {
 }
 
 print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
+    echo -e "${GREEN}OK${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
+    echo -e "${YELLOW}WARN${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}✗ $1${NC}"
+    echo -e "${RED}ERR${NC} $1"
 }
 
 print_info() {
-    echo -e "${BLUE}ℹ $1${NC}"
+    echo -e "${BLUE}INFO${NC} $1"
 }
 
-# Check if running as root
 check_root() {
-    if [ "$EUID" -eq 0 ]; then
-        print_warning "Running as root. This is not recommended for pip installations."
-        print_info "Consider running as regular user with sudo access."
-        read -p "Continue anyway? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    if [[ ${EUID} -eq 0 ]]; then
+        print_warning "Running as root. A regular sudo-capable user is recommended."
+        read -r -p "Continue anyway? (y/n) " reply
+        if [[ ! ${reply} =~ ^[Yy]$ ]]; then
             exit 1
         fi
     fi
 }
 
-# Check Python version
 check_python() {
     print_header "Checking Python Installation"
-    
-    if command -v python3 &> /dev/null; then
-        PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
-        print_success "Python 3 found: $PYTHON_VERSION"
-        PYTHON_CMD="python3"
-        PIP_CMD="pip3"
+
+    if command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+        PYTHON_VERSION=$("${PYTHON_BIN}" --version | awk '{print $2}')
+        print_success "Python found: ${PYTHON_VERSION}"
     else
-        print_error "Python 3 not found. Please install Python 3.8 or higher."
+        print_error "Python 3 not found. Install Python 3.10+ first."
         exit 1
-    fi
-    
-    # Check pip
-    if ! command -v $PIP_CMD &> /dev/null; then
-        print_warning "pip3 not found. Installing pip..."
-        curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-        $PYTHON_CMD get-pip.py --user
-        rm get-pip.py
-        print_success "pip installed"
-    else
-        print_success "pip found"
     fi
 }
 
-# Check Ansible installation
+prepare_virtualenv() {
+    print_header "Preparing Virtual Environment"
+
+    if [[ ! -d "${VENV_DIR}" ]]; then
+        print_info "Creating virtual environment at ${VENV_DIR}"
+        if ! "${PYTHON_BIN}" -m venv "${VENV_DIR}" >/dev/null 2>&1; then
+            print_error "Failed to create a virtual environment."
+            print_info "On Ubuntu install the required package with: sudo apt-get install -y python3-venv"
+            exit 1
+        fi
+    else
+        print_success "Virtual environment already exists: ${VENV_DIR}"
+    fi
+
+    PYTHON_CMD="${VENV_DIR}/bin/python"
+    PIP_CMD="${VENV_DIR}/bin/pip"
+    ANSIBLE_CMD="${VENV_DIR}/bin/ansible"
+    ANSIBLE_GALAXY_CMD="${VENV_DIR}/bin/ansible-galaxy"
+    ANSIBLE_PLAYBOOK_CMD="${VENV_DIR}/bin/ansible-playbook"
+
+    "${PYTHON_CMD}" -m pip install --quiet --upgrade pip
+    print_success "pip is ready inside the virtual environment"
+}
+
 check_ansible() {
     print_header "Checking Ansible Installation"
-    
-    if command -v ansible &> /dev/null; then
-        ANSIBLE_VERSION=$(ansible --version | head -n1 | cut -d' ' -f2 | cut -d']' -f1 | cut -d'[' -f2)
-        print_success "Ansible found: $ANSIBLE_VERSION"
+
+    if [[ -x "${ANSIBLE_CMD}" ]]; then
+        ANSIBLE_VERSION=$("${ANSIBLE_CMD}" --version | head -n1)
+        print_success "Using ${ANSIBLE_VERSION}"
     else
-        print_warning "Ansible not found. Installing..."
-        $PIP_CMD install --user ansible
-        print_success "Ansible installed"
+        print_info "Ansible will be installed from requirements.txt"
     fi
 }
 
-# Install Python OpenStack dependencies
 install_python_deps() {
     print_header "Installing Python OpenStack Dependencies"
-    
-    if [ -f "requirements.txt" ]; then
-        print_info "Installing from requirements.txt..."
-        $PIP_CMD install --user -r requirements.txt
+
+    if [[ -f "${SCRIPT_DIR}/requirements.txt" ]]; then
+        print_info "Installing from ${SCRIPT_DIR}/requirements.txt"
+        "${PIP_CMD}" install -r "${SCRIPT_DIR}/requirements.txt"
         print_success "Python dependencies installed"
     else
-        print_error "requirements.txt not found!"
+        print_error "requirements.txt not found in ${SCRIPT_DIR}"
         exit 1
     fi
 }
 
-# Install Ansible collections
 install_ansible_collections() {
     print_header "Installing Ansible Collections"
-    
-    if [ -f "requirements.yml" ]; then
-        print_info "Installing Ansible collections..."
-        ansible-galaxy collection install -r requirements.yml --force
+
+    if [[ -f "${SCRIPT_DIR}/requirements.yml" ]]; then
+        print_info "Installing from ${SCRIPT_DIR}/requirements.yml"
+        "${ANSIBLE_GALAXY_CMD}" collection install -r "${SCRIPT_DIR}/requirements.yml" --force
         print_success "Ansible collections installed"
     else
-        print_error "requirements.yml not found!"
+        print_error "requirements.yml not found in ${SCRIPT_DIR}"
         exit 1
     fi
 }
 
-# Verify OpenStack SDK
 verify_openstack_sdk() {
     print_header "Verifying OpenStack SDK Installation"
-    
-    if $PYTHON_CMD -c "import openstack" 2>/dev/null; then
-        SDK_VERSION=$($PYTHON_CMD -c "import openstack; print(openstack.version.__version__)")
-        print_success "OpenStack SDK is working (version: $SDK_VERSION)"
+
+    if "${PYTHON_CMD}" -c "import openstack" 2>/dev/null; then
+        SDK_VERSION=$("${PYTHON_CMD}" -c "import openstack; print(openstack.version.__version__)")
+        print_success "OpenStack SDK is working (version: ${SDK_VERSION})"
     else
-        print_error "OpenStack SDK verification failed!"
+        print_error "OpenStack SDK verification failed"
         exit 1
     fi
 }
 
-# Check clouds.yaml
 check_clouds_config() {
+    local clouds_file="${SCRIPT_DIR}/clouds.yaml"
+
     print_header "Checking OpenStack Configuration"
-    
-    if [ -f "clouds.yaml" ]; then
-        print_success "clouds.yaml found"
-        print_info "Please ensure your OpenStack credentials are configured in clouds.yaml"
-    else
-        print_warning "clouds.yaml not found!"
-        print_info "Creating template clouds.yaml..."
-        cat > clouds.yaml << 'EOF'
+
+    if [[ -f "${clouds_file}" ]]; then
+        print_success "clouds.yaml found at ${clouds_file}"
+        print_info "Update it with real credentials if you have not already."
+        return
+    fi
+
+    print_warning "clouds.yaml not found. Creating a template at ${clouds_file}"
+    cat > "${clouds_file}" <<'EOF'
 # OpenStack Clouds Configuration
 # Update with your OpenStack credentials
 
@@ -158,83 +165,75 @@ clouds:
     interface: public
     identity_api_version: 3
 EOF
-        print_info "Template clouds.yaml created. Please update with your credentials."
-    fi
+    print_info "Template clouds.yaml created. You can also use ~/.config/openstack/clouds.yaml."
 }
 
-# Test OpenStack connection
 test_openstack_connection() {
+    local test_playbook
+
     print_header "Testing OpenStack Connection (Optional)"
-    
-    read -p "Would you like to test OpenStack connection? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Testing connection..."
-        
-        # Create test playbook
-        cat > test-connection.yml << 'EOF'
+
+    read -r -p "Would you like to test the OpenStack connection now? (y/n) " reply
+    if [[ ! ${reply} =~ ^[Yy]$ ]]; then
+        return
+    fi
+
+    test_playbook="$(mktemp "${SCRIPT_DIR}/test-connection.XXXXXX.yml")"
+    cat > "${test_playbook}" <<'EOF'
 ---
 - name: Test OpenStack Connection
   hosts: localhost
-  gather_facts: no
+  gather_facts: false
   tasks:
     - name: List available images
       openstack.cloud.image_info:
         cloud: mycloud
       register: images
-      ignore_errors: yes
-    
+      ignore_errors: true
+
     - name: Connection test result
       debug:
         msg: "{{ 'SUCCESS: Connected to OpenStack' if images is succeeded else 'FAILED: Could not connect' }}"
 EOF
-        
-        if ansible-playbook test-connection.yml 2>/dev/null; then
-            print_success "OpenStack connection test passed!"
-        else
-            print_warning "OpenStack connection test failed. Please check your clouds.yaml configuration."
-        fi
-        
-        rm -f test-connection.yml
+
+    if "${ANSIBLE_PLAYBOOK_CMD}" "${test_playbook}" 2>/dev/null; then
+        print_success "OpenStack connection test passed"
+    else
+        print_warning "Connection test failed. Check clouds.yaml and your cloud reachability."
     fi
+
+    rm -f "${test_playbook}"
 }
 
-# Display summary
 display_summary() {
     print_header "Installation Summary"
-    
-    echo -e "${GREEN}All dependencies installed successfully!${NC}\n"
-    
+
+    echo -e "${GREEN}All dependencies installed successfully.${NC}\n"
+    echo "Environment:"
+    echo "  Virtualenv: ${VENV_DIR}"
+    echo "  Activate:   source \"${VENV_DIR}/bin/activate\""
+    echo ""
     echo "Installed components:"
-    echo "  • Python OpenStack SDK"
-    echo "  • OpenStack CLI clients"
-    echo "  • Ansible OpenStack collection (openstack.cloud)"
-    echo "  • Supporting Ansible collections"
+    echo "  - OpenStack SDK and CLI clients"
+    echo "  - Ansible and the openstack.cloud collection"
+    echo "  - Supporting Python packages from requirements.txt"
     echo ""
-    
     echo "Next steps:"
-    echo "  1. Update clouds.yaml with your OpenStack credentials"
-    echo "  2. Test connection: ansible-playbook test-openstack.yml"
-    echo "  3. Run scenarios: ansible-playbook scenario1_basic_vm.yml"
-    echo ""
-    
-    echo "Useful commands:"
-    echo "  • List collections: ansible-galaxy collection list"
-    echo "  • Test OpenStack CLI: openstack image list"
-    echo "  • Verify SDK: python3 -c 'import openstack; print(openstack.version.__version__)'"
+    echo "  1. Update ${SCRIPT_DIR}/clouds.yaml or ~/.config/openstack/clouds.yaml"
+    echo "  2. Test connection: ${ANSIBLE_PLAYBOOK_CMD} ${SCRIPT_DIR}/test-openstack.yml"
+    echo "  3. Run scenarios: ${ANSIBLE_PLAYBOOK_CMD} ${SCRIPT_DIR}/scenario1_basic_vm.yml"
     echo ""
 }
 
-# Main installation process
 main() {
-    clear
+    clear || true
     print_header "OpenStack Ansible Lab Setup"
-    echo "This script will install all necessary dependencies for OpenStack automation with Ansible."
+    echo "This script installs the lab dependencies into a project-local virtual environment."
     echo ""
-    
-    # Run checks and installations
+
     check_root
     check_python
+    prepare_virtualenv
     check_ansible
     install_python_deps
     install_ansible_collections
@@ -242,9 +241,8 @@ main() {
     check_clouds_config
     test_openstack_connection
     display_summary
-    
-    print_success "Setup complete! You're ready to use OpenStack with Ansible."
+
+    print_success "Setup complete"
 }
 
-# Run main function
-main
+main "$@"

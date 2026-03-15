@@ -82,7 +82,7 @@
         content: |
           Full Stack Application Deployment
           ==================================
-          Deployment Date: {{ ansible_date_time.iso8601 }}
+          Deployment Date: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
           
           Application Details:
           - Name: {{ app_name }}

@@ -80,6 +80,11 @@ launch_container() {
 
   echo "[INFO] Enabling nesting inside ${name} for DevStack requirements..."
   lxc config set "${name}" security.nesting true
+  lxc config set "${name}" security.privileged true
+
+  if [[ -e /dev/kvm ]] && ! lxc config device show "${name}" | grep -q '^kvm:'; then
+    lxc config device add "${name}" kvm unix-char source=/dev/kvm path=/dev/kvm || true
+  fi
 
   echo "[INFO] Waiting for cloud-init to complete in ${name}..."
   lxc exec "${name}" -- cloud-init status --wait
@@ -103,10 +108,69 @@ copy_devstack_scripts() {
   fi
 
   echo "[INFO] Preparing DevStack inside ${name} (IP: ${ip})..."
-  lxc exec "${name}" -- bash -lc "set -euo pipefail; \n    sudo apt-get update -y && sudo apt-get install -y git sudo net-tools python3-pip \n    && id stack >/dev/null 2>&1 || sudo useradd -s /bin/bash -d /opt/stack -m stack \n    && echo 'stack ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/stack >/dev/null \n    && sudo -u stack bash -lc 'if [ ! -d devstack ]; then git clone https://opendev.org/openstack/devstack -b ${RELEASE}; fi'"
+  lxc exec "${name}" -- bash -lc '
+    set -euo pipefail
+    sudo apt-get update -y
+    sudo apt-get install -y ca-certificates curl git sudo net-tools python3-pip python3-venv
+
+    if ! id stack >/dev/null 2>&1; then
+      sudo useradd -s /bin/bash -d /opt/stack -m stack
+    fi
+
+    echo "stack ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/stack >/dev/null
+    sudo chmod 0440 /etc/sudoers.d/stack
+  '
+
+  lxc exec "${name}" -- sudo -u stack bash -s -- "${RELEASE}" <<'EOF'
+set -euo pipefail
+release_branch="$1"
+cd /opt/stack
+if [[ ! -d devstack ]]; then
+  git clone https://opendev.org/openstack/devstack -b "${release_branch}"
+fi
+EOF
 
   echo "[INFO] Writing local.conf for ${name}..."
-  lxc exec "${name}" -- bash -lc "set -euo pipefail; \n    sudo -u stack bash -lc 'cat > devstack/local.conf <<\"EOF\"\n[[local|localrc]]\nHOST_IP=${ip}\nSERVICE_HOST=${ip}\nSERVICE_PROTOCOL=http\nADMIN_PASSWORD=${ADMIN_PASSWORD}\nDATABASE_PASSWORD=${DATABASE_PASSWORD}\nRABBIT_PASSWORD=${RABBIT_PASSWORD}\nSERVICE_PASSWORD=${SERVICE_PASSWORD}\nLOGFILE=\$DEST/logs/stack.sh.log\nLOGDIR=\$DEST/logs\nENABLE_IDENTITY_V2=False\nKEYSTONE_SERVICE_PORT=${keystone_port}\nKEYSTONE_AUTH_PORT=${keystone_port}\nKEYSTONE_PUBLIC_ENDPOINT=http://${ip}:${keystone_port}/v3\nKEYSTONE_ADMIN_ENDPOINT=http://${ip}:${keystone_port}/v3\nHORIZON_PORT=${horizon_port}\n\n[[post-config|\$KEYSTONE_CONF]]\n[DEFAULT]\npublic_port=${keystone_port}\nadmin_port=${keystone_port}\n\n[[post-config|\$HORIZON_CONF]]\n[uwsgi]\nhttp=${ip}:${horizon_port}\n\nEOF'"
+  lxc exec "${name}" -- sudo -u stack bash -s -- \
+    "${ip}" "${keystone_port}" "${horizon_port}" "${ADMIN_PASSWORD}" "${DATABASE_PASSWORD}" "${RABBIT_PASSWORD}" "${SERVICE_PASSWORD}" <<'EOF'
+set -euo pipefail
+ip="$1"
+keystone_port="$2"
+horizon_port="$3"
+admin_password="$4"
+database_password="$5"
+rabbit_password="$6"
+service_password="$7"
+
+cd /opt/stack/devstack
+cat > local.conf <<LOCAL
+[[local|localrc]]
+HOST_IP=${ip}
+SERVICE_HOST=${ip}
+SERVICE_PROTOCOL=http
+ADMIN_PASSWORD=${admin_password}
+DATABASE_PASSWORD=${database_password}
+RABBIT_PASSWORD=${rabbit_password}
+SERVICE_PASSWORD=${service_password}
+LOGFILE=\$DEST/logs/stack.sh.log
+LOGDIR=\$DEST/logs
+ENABLE_IDENTITY_V2=False
+KEYSTONE_SERVICE_PORT=${keystone_port}
+KEYSTONE_AUTH_PORT=${keystone_port}
+KEYSTONE_PUBLIC_ENDPOINT=http://${ip}:${keystone_port}/v3
+KEYSTONE_ADMIN_ENDPOINT=http://${ip}:${keystone_port}/v3
+HORIZON_PORT=${horizon_port}
+
+[[post-config|\$KEYSTONE_CONF]]
+[DEFAULT]
+public_port=${keystone_port}
+admin_port=${keystone_port}
+
+[[post-config|\$HORIZON_CONF]]
+[uwsgi]
+http=${ip}:${horizon_port}
+LOCAL
+EOF
 
   echo "[INFO] local.conf created for ${name} with Keystone port ${keystone_port} and Horizon port ${horizon_port}."
 

@@ -61,11 +61,10 @@
     ignore_errors: yes
 
   - name: Detach router from subnet
-    openstack.cloud.router_interface:
-      cloud: "{{ cloud_name }}"
-      router: "{{ router_name }}"
-      subnet: "{{ subnet_name }}"
-      state: absent
+    command: "openstack router remove subnet {{ router_name }} {{ subnet_name }}"
+    environment:
+      OS_CLOUD: "{{ cloud_name }}"
+    changed_when: true
     ignore_errors: yes
 
   - name: Delete router

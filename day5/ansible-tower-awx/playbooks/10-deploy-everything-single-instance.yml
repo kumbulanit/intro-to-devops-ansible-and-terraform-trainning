@@ -199,7 +199,7 @@
       failed_when: false
 
     - name: Verify AWX containers are running
-      shell: docker ps --filter "name=awx" --format "{{.Names}}: {{.Status}}"
+      shell: 'docker ps --filter "name=awx" --format "{{"{{"}}.Names{{"}}"}}: {{"{{"}}.Status{{"}}"}}"'
       register: awx_containers
       changed_when: false
       failed_when: false
@@ -363,13 +363,13 @@
 
     - name: Save complete deployment summary
       copy:
-        dest: "./deployment-summary-{{ ansible_date_time.date }}.txt"
+        dest: "./deployment-summary-{{ now(utc=true, fmt='%Y-%m-%d') }}.txt"
         content: |
           ╔════════════════════════════════════════════════════════════════╗
           ║     Complete Deployment Summary - Single Instance             ║
           ╚════════════════════════════════════════════════════════════════╝
           
-          Deployment Date: {{ ansible_date_time.iso8601 }}
+          Deployment Date: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
           
           SERVER INFORMATION:
           ==================
@@ -510,7 +510,7 @@
         msg:
           - ""
           - "📄 Generated files:"
-          - "   • ./deployment-summary-{{ ansible_date_time.date }}.txt"
+          - "   • ./deployment-summary-{{ now(utc=true, fmt='%Y-%m-%d') }}.txt"
           - "   • ./awx-access-info.txt"
           - "   • ./complete-stack-access-info.txt"
           - ""

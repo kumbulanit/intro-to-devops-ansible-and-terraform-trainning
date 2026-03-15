@@ -23,6 +23,7 @@ cd day4/Openstack/ansible_openstack_lab-fullest/
 ```
 
 This will:
+- Create a project-local virtual environment in `.venv`
 - Install all Python OpenStack packages
 - Install Ansible collections
 - Verify the installation
@@ -34,7 +35,10 @@ If you prefer step-by-step installation:
 ### Step 1: Install Python Dependencies
 
 ```bash
-pip3 install --user -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
 This installs:
@@ -61,7 +65,7 @@ This installs:
 
 ```bash
 # Check OpenStack SDK
-python3 -c "import openstack; print('SDK version:', openstack.version.__version__)"
+python -c "import openstack; print('SDK version:', openstack.version.__version__)"
 
 # Check Ansible collections
 ansible-galaxy collection list | grep openstack
@@ -129,7 +133,7 @@ export OS_PROJECT_DOMAIN_NAME=Default
 ### Test OpenStack Connection
 
 ```bash
-ansible-playbook test-openstack.yml
+.venv/bin/ansible-playbook test-openstack.yml
 ```
 
 This comprehensive test checks:
@@ -165,7 +169,7 @@ This interactive script:
 5. Verifies OpenStack SDK
 6. Checks clouds.yaml configuration
 7. Optionally tests OpenStack connection
-8. Provides detailed summary
+8. Provides detailed summary, including the virtualenv activation command
 
 ## 🔧 Troubleshooting
 
@@ -173,7 +177,8 @@ This interactive script:
 
 **Solution:**
 ```bash
-pip3 install --user openstacksdk
+source .venv/bin/activate
+python -m pip install openstacksdk
 ```
 
 ### Issue: "Collection openstack.cloud not found"
@@ -206,12 +211,14 @@ clouds:
     # ... other settings
 ```
 
-### Issue: Permission denied errors
+### Issue: Ubuntu blocks direct pip installs (PEP 668)
 
 **Solution:**
 ```bash
-# Install without --user flag (may require sudo)
-sudo pip3 install -r requirements.txt
+sudo apt-get install -y python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
 ## 📦 What Gets Installed

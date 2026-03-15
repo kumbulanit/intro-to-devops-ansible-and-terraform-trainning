@@ -19,6 +19,8 @@ NC='\033[0m' # No Color
 # Counters
 PASS=0
 FAIL=0
+CLOUD_NAME=${CLOUD_NAME:-mycloud}
+EXPECTED_AUTH_URL=${EXPECTED_AUTH_URL:-}
 
 # Function to check and report
 check_config() {
@@ -51,12 +53,17 @@ else
 fi
 
 # Check endpoint
-endpoint=$(grep -A10 "mycloud:" clouds.yaml 2>/dev/null | grep "auth_url:" | awk '{print $2}' | head -1)
-if [ "$endpoint" == "http://10.0.3.15/identity" ]; then
-    echo -e "${GREEN}✓${NC} OpenStack endpoint: $endpoint"
-    ((PASS++))
+endpoint=$(grep -A10 "${CLOUD_NAME}:" clouds.yaml 2>/dev/null | grep "auth_url:" | awk '{print $2}' | head -1)
+if [ -n "$endpoint" ]; then
+    if [ -n "$EXPECTED_AUTH_URL" ] && [ "$endpoint" != "$EXPECTED_AUTH_URL" ]; then
+        echo -e "${RED}✗${NC} Wrong endpoint: $endpoint (Expected: $EXPECTED_AUTH_URL)"
+        ((FAIL++))
+    else
+        echo -e "${GREEN}✓${NC} OpenStack endpoint for ${CLOUD_NAME}: $endpoint"
+        ((PASS++))
+    fi
 else
-    echo -e "${RED}✗${NC} Wrong endpoint: $endpoint (Expected: http://10.0.3.15/identity)"
+    echo -e "${RED}✗${NC} No auth_url found for cloud profile ${CLOUD_NAME}"
     ((FAIL++))
 fi
 

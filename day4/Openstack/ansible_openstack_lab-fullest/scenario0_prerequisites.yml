@@ -218,11 +218,11 @@
         3. Run any scenario playbook, for example:
            ansible-playbook scenario1_basic_vm.yml
 
-    Quick Image Reference:
-    - cirros-0.6.2: Fastest boot, minimal testing
-    - ubuntu-24.04: Production workloads, full Ubuntu features
-    - debian-12: Stable, reliable, Debian ecosystem
-    - alpine-3.19: Ultra-light, container-friendly
-    - fedora-39: Latest packages, cutting edge features
+        Quick Image Reference:
+        - cirros-0.6.2: Fastest boot, minimal testing
+        - ubuntu-24.04: Production workloads, full Ubuntu features
+        - debian-12: Stable, reliable, Debian ecosystem
+        - alpine-3.19: Ultra-light, container-friendly
+        - fedora-39: Latest packages, cutting edge features
 
         All images are cloud-init enabled and bootable!

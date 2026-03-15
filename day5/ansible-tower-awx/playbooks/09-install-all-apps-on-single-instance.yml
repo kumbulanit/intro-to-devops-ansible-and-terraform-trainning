@@ -618,7 +618,7 @@
           Complete Application Stack - Access Information
           ================================================
           
-          Installation Date: {{ ansible_date_time.iso8601 }}
+          Installation Date: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
           Server: {{ inventory_hostname }} ({{ ansible_host }})
           
           SERVICE ACCESS URLS:
